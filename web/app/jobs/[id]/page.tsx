@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { jobs } from "@/app/lib/data/jobs";
 import { notFound } from "next/navigation";
+import DraftPanel from "@/app/components/DraftPanel";
 
 type JobStatus = {
   params : Promise<{id : string}>
@@ -37,7 +38,7 @@ if(!jobWithId){
         {jobWithId.description}
       </div>
 
-      {/* steps 2–6 add the cover-letter part here */}
+      <DraftPanel jobId={jobWithId.id} />
     </main>
   );
 }

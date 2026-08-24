@@ -24,3 +24,114 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── step 2: the draft pane ───────────────────────────────────────────────
+   Markdown arrives from the model as bare <h3>/<p>/<strong>/<ul> tags with
+   no classes on them, so the styling has to be written once, here, against
+   the element names. Everything is scoped under .draft-prose so it cannot
+   leak into the rest of the app.
+
+   Inside @layer components on purpose: a Tailwind utility on the same
+   element still wins, so you can override any of this inline. */
+
+@layer components {
+  .draft-prose {
+    font-size: 0.875rem;
+    line-height: 1.7;
+  }
+
+  .draft-prose > * + * {
+    margin-top: 0.85em;
+  }
+
+  .draft-prose h1,
+  .draft-prose h2,
+  .draft-prose h3 {
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .draft-prose h1 { font-size: 1.125rem; }
+  .draft-prose h2 { font-size: 1rem; }
+  .draft-prose h3 { font-size: 0.9375rem; }
+
+  .draft-prose h1 + *,
+  .draft-prose h2 + *,
+  .draft-prose h3 + * {
+    margin-top: 0.4em;
+  }
+
+  .draft-prose strong { font-weight: 600; }
+  .draft-prose em { font-style: italic; }
+
+  .draft-prose ul,
+  .draft-prose ol {
+    padding-left: 1.25rem;
+  }
+
+  .draft-prose ul { list-style: disc; }
+  .draft-prose ol { list-style: decimal; }
+
+  .draft-prose li + li { margin-top: 0.25em; }
+
+  .draft-prose li::marker {
+    color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  }
+
+  .draft-prose a {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .draft-prose blockquote {
+    padding-left: 0.75rem;
+    border-left: 2px solid color-mix(in srgb, var(--foreground) 15%, transparent);
+    color: color-mix(in srgb, var(--foreground) 70%, transparent);
+  }
+
+  .draft-prose code {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.85em;
+    padding: 0.1em 0.3em;
+    border-radius: 0.25rem;
+    background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  }
+
+  .draft-prose pre {
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  }
+
+  .draft-prose pre code {
+    padding: 0;
+    background: none;
+  }
+
+  .draft-prose hr {
+    border: 0;
+    border-top: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  }
+
+  /* The caret that says "still arriving". Sits at the end of the last line,
+     so it has to be inline and it must not push the text around. */
+  .streaming-caret {
+    display: inline-block;
+    width: 0.5em;
+    height: 1em;
+    margin-left: 0.15em;
+    vertical-align: text-bottom;
+    background: currentColor;
+    animation: caret-blink 1s steps(1, end) infinite;
+  }
+
+  @keyframes caret-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .streaming-caret { animation: none; opacity: 0.6; }
+  }
+}
