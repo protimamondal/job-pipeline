@@ -38,7 +38,7 @@ if(!jobWithId){
         {jobWithId.description}
       </div>
 
-      <DraftPanel jobId={jobWithId.id} />
+      <DraftPanel />
     </main>
   );
 }
