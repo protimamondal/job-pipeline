@@ -136,3 +136,33 @@ body {
     .streaming-caret { animation: none; opacity: 0.6; }
   }
 }
+
+/* ── step 3: editing the letter ───────────────────────────────────────────
+   The edit pane replaces the rendered letter in place. Every metric here
+   has to match .draft-prose exactly — same font size, same line height,
+   same zero padding — or the text jumps sideways the moment you click Edit.
+   That jump is the whole reason this is a CSS problem and not a JSX one. */
+
+@layer components {
+  .draft-editor {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  /* Put on the <article> while editing, so it is visibly a different mode
+     without the text itself moving. */
+  .draft-editing {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 25%, transparent);
+  }
+}
