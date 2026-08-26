@@ -1,13 +1,27 @@
-// STEP 2 — the draft pane. CSS SKELETON ONLY.
+// STEP 2 — the draft pane.
 //
-// Structure and classes, nothing else. No hook, no route, no renderer, no
-// placeholder copy. The two classes that matter are in globals.css:
-//   .draft-prose      styles the tags a markdown renderer emits
-//   .streaming-caret  the blinking block for "still arriving" (not used yet)
+// Streams a cover letter for one job and renders it as markdown while it
+// arrives. The markdown repair lives in app/lib/markdown/renderable.ts.
+//
+// FAKE points the hook at a fixed, slow, character-by-character stream —
+// the only reliable way to watch the half-arrived markers. Step 5 reuses it.
 
 "use client";
 
-export default function DraftPanel() {
+import { useCompletion } from "@ai-sdk/react";
+import { Streamdown } from "streamdown";
+import "streamdown/styles.css";
+import { trimOpenMarker } from "@/app/lib/markdown/renderable";
+
+const FAKE = false;
+
+export default function DraftPanel({ id }: { id: string }) {
+  const { completion, complete, isLoading, stop } = useCompletion({
+    api: FAKE ? "/api/draft/fake" : "/api/draft",
+    streamProtocol: "text",
+    body: { id },
+  });
+
   return (
     <section className="mt-10 border-t border-black/10 pt-6 dark:border-white/15">
       <div className="flex items-center justify-between gap-4">
@@ -15,16 +29,34 @@ export default function DraftPanel() {
           Cover letter
         </h2>
 
-        <button
-          type="button"
-          className="rounded-full bg-foreground px-4 py-2 text-sm text-background hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Draft application
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={isLoading}
+            className="rounded-full bg-foreground px-4 py-2 text-sm text-background hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => complete("")}
+          >
+            Draft application
+          </button>
+
+          <button
+            type="button"
+            disabled={!isLoading}
+            className="rounded-full border border-black/15 px-4 py-2 text-sm hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:hover:bg-white/10"
+            onClick={stop}
+          >
+            Stop
+          </button>
+        </div>
       </div>
 
       <article className="mt-4 rounded-lg border border-black/10 px-5 py-4 dark:border-white/15">
-        <div className="draft-prose">{/* the letter renders here */}</div>
+        <div className="draft-prose">
+          {isLoading && !completion && <p>Preparing draft…</p>}
+          <Streamdown isAnimating={isLoading}>
+            {trimOpenMarker(completion, isLoading)}
+          </Streamdown>
+        </div>
       </article>
     </section>
   );

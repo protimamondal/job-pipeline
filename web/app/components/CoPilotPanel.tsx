@@ -3,7 +3,7 @@
 
 'use client'
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { searchJobInput2, serachResultObject2 } from "../lib/data/types";
@@ -23,7 +23,8 @@ export default function CoPilotPanel() {
     })
   })
 
-function handleSubmit(){
+function handleSubmit(e : FormEvent){
+    e.preventDefault();
     if(!input.trim()) return;
 
   sendMessage({
@@ -90,7 +91,7 @@ function handleSubmit(){
    {status==="submitted" && <div className="mx-auto w-full max-w-2xl px-4 py-3 text-sm text-gray-500">Thinking...</div>}
    {error && <div className="mx-auto w-full max-w-2xl px-4 py-3  text-red-700">Some problem occured</div>}
 
-      <div className="shrink-0 border-t border-black/10 p-3 dark:border-white/15">
+      <form onSubmit={handleSubmit} className="shrink-0 border-t border-black/10 p-3 dark:border-white/15">
         <div className="flex gap-2">
           <input
             type="text"
@@ -101,10 +102,10 @@ function handleSubmit(){
     {status === "submitted" || status === "streaming" ? (
       <button type="button" onClick={stop} className="rounded-full border border-black/15 px-6 py-3 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10">stop</button>
     ) : (
-      <button type="submit" onClick={handleSubmit} className="rounded-full bg-foreground px-6 py-3 text-background hover:opacity-80">send</button>
+      <button type="submit" className="rounded-full bg-foreground px-6 py-3 text-background hover:opacity-80">send</button>
     )}
         </div>
-      </div>
+      </form>
     </aside>
   );
 }

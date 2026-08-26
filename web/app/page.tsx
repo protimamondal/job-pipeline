@@ -1,9 +1,7 @@
 // PAGE 1 â€” the pipeline list.
 // Skeleton only: layout and styling, static placeholder markup.
 // You write the grouping and the mapping over `jobs`.
-"use client"
 
-import { useState } from "react";
 import { JobStatus, Job, jobs, jobsByStatus } from "./lib/data/jobs";
 import Link from "next/link";
 
@@ -44,7 +42,7 @@ export default function PipelinePage() {
         <Link key={row.id} href={`/jobs/${row.id}`} className="block rounded-lg px-3 py-2.5 hover:bg-black/5 dark:hover:bg-white/10">
           <div className="font-medium">{row.title}</div>
           <div className="text-sm text-gray-500"  >
-            {row.company} . {row.location} . ${row.salary_usd}
+            {row.company} . {row.location} . {row.salary_usd !== null ? `$${row.salary_usd.toLocaleString()}` : "salary not listed"}
           </div>
         </Link>
           ))

@@ -7,12 +7,12 @@ import { jobs } from "@/app/lib/data/jobs";
 import { notFound } from "next/navigation";
 import DraftPanel from "@/app/components/DraftPanel";
 
-type JobStatus = {
+type JobDesc = {
   params : Promise<{id : string}>
 }
 
 
-export default async function JobPage({params}: JobStatus) {
+export default async function JobPage({params}: JobDesc) {
 
   const {id} = await params
 
@@ -29,7 +29,7 @@ if(!jobWithId){
       </Link>
 
       <h1 className="mt-3 text-xl font-semibold">{jobWithId.title}</h1>
-      <div className="text-sm text-gray-500">{jobWithId.company} · {jobWithId.location} · ${jobWithId.salary_usd}</div>
+      <div className="text-sm text-gray-500">{jobWithId.company} · {jobWithId.location} · {jobWithId.salary_usd !== null ? `$${jobWithId.salary_usd.toLocaleString()}` : "salary not listed"}</div>
 
       <h2 className="mt-8 text-xs uppercase tracking-wide text-gray-500">
         Job description
@@ -38,7 +38,7 @@ if(!jobWithId){
         {jobWithId.description}
       </div>
 
-      <DraftPanel />
+      <DraftPanel id= {id}/>
     </main>
   );
 }
