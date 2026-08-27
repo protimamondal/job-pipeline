@@ -1,7 +1,9 @@
 import { jobs } from "@/app/lib/data/jobs";
 import { profile } from "@/app/lib/data/profile";
 import { openai } from "@ai-sdk/openai";
-import { createTextStreamResponse, streamText, toTextStream } from "ai";
+import { createTextStreamResponse, streamText } from "ai";
+
+const STREAM_ERROR_MARKER = "\n\n[[error:stream_failed]]";
 
 export async function POST(req: Request) {
   const { id,prompt } = await req.json();
@@ -27,9 +29,32 @@ export async function POST(req: Request) {
              ${prompt ? `Extra user instruction: ${prompt}` : ""}`,
   });
 
-  return createTextStreamResponse({
-    stream: toTextStream({
-      stream: result.stream,
-    }),
+  const stream = new ReadableStream<string>({
+    async start(controller) {
+      const reader = result.stream.getReader();
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          if (value.type === "text-delta") {
+            controller.enqueue(value.text);
+          }
+
+          if (value.type === "error") {
+            console.error(value.error);
+            controller.enqueue(STREAM_ERROR_MARKER);
+          }
+        }
+      } catch (error) {
+        console.error(error);
+        controller.enqueue(STREAM_ERROR_MARKER);
+      } finally {
+        controller.close();
+      }
+    },
   });
+
+  return createTextStreamResponse({ stream });
 }

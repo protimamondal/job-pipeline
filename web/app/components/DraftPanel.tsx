@@ -15,6 +15,23 @@ import "streamdown/styles.css";
 import { trimOpenMarker } from "@/app/lib/markdown/renderable";
 
 const FAKE = false;
+const STREAM_ERROR_MARKER = "[[error:stream_failed]]";
+
+function parseDraftStream(text: string) {
+  const markerIndex = text.indexOf(STREAM_ERROR_MARKER);
+
+  if (markerIndex === -1) {
+    return {
+      visibleText: text,
+      streamFailed: false,
+    };
+  }
+
+  return {
+    visibleText: text.slice(0, markerIndex),
+    streamFailed: true,
+  };
+}
 
 export default function DraftPanel({ id }: { id: string }) {
 
@@ -26,11 +43,12 @@ export default function DraftPanel({ id }: { id: string }) {
 
   const [edited, setEdited] = useState(false);
 
-  const { completion, complete, setCompletion, isLoading, stop } = useCompletion({
+  const { completion, complete, error, setCompletion, isLoading, stop } = useCompletion({
     api: FAKE ? "/api/draft/fake" : "/api/draft",
     streamProtocol: "text",
     body: { id },
   });
+  const parsedDraft = parseDraftStream(completion);
 
    function handleDraft() {
     setIsEditing(false);
@@ -47,7 +65,7 @@ export default function DraftPanel({ id }: { id: string }) {
   }
 
   async function handleCopy(){
-    const textToCopy = isEditing ? editedText : completion;
+    const textToCopy = isEditing ? editedText : parsedDraft.visibleText;
     await navigator.clipboard.writeText(textToCopy);
     setCopied(true)
     setTimeout(()=>{
@@ -56,7 +74,7 @@ export default function DraftPanel({ id }: { id: string }) {
   }
 
   function handleEdit(){
-    setEditedText(completion)
+    setEditedText(parsedDraft.visibleText)
     setIsEditing(true);
   }
 
@@ -137,10 +155,36 @@ export default function DraftPanel({ id }: { id: string }) {
     <div className="draft-prose">
       {isLoading && !completion && <p>Preparing draft…</p>}
       <Streamdown isAnimating={isLoading}>
-        {trimOpenMarker(completion, isLoading)}
+        {trimOpenMarker(parsedDraft.visibleText, isLoading)}
       </Streamdown>
+      {parsedDraft.streamFailed && (
+        <div className="mt-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-900 dark:text-yellow-200">
+          <p>The draft stopped before finishing. The text above is incomplete.</p>
+          <button
+            type="button"
+            onClick={handleRegenerate}
+            className="mt-2 rounded-full border border-yellow-600/40 px-3 py-1.5 text-xs hover:bg-yellow-500/10"
+          >
+            Retry
+          </button>
+        </div>
+      )}
     </div>
   )}
+  {error && !isLoading && !completion && (
+  <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm">
+    <span className="text-red-700 dark:text-red-400">
+      The draft could not be started.
+    </span>
+    <button
+      type="button"
+      onClick={() => complete(instruction)}
+      className="shrink-0 rounded-full border border-red-500/40 px-3 py-1.5 text-xs"
+    >
+      Retry
+    </button>
+  </div>
+)}
 
         {/* STEP 3 — the affordances. Copy says "Copied" for about two seconds
             and is disabled while text is still arriving. Editing replaces the
