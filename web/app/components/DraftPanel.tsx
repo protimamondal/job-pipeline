@@ -24,7 +24,9 @@ export default function DraftPanel({ id }: { id: string }) {
   const [editedText, setEditedText] = useState("");
 
 
-  const { completion, complete, isLoading, stop } = useCompletion({
+  const [edited, setEdited] = useState(false);
+
+  const { completion, complete, setCompletion, isLoading, stop } = useCompletion({
     api: FAKE ? "/api/draft/fake" : "/api/draft",
     streamProtocol: "text",
     body: { id },
@@ -33,12 +35,14 @@ export default function DraftPanel({ id }: { id: string }) {
    function handleDraft() {
     setIsEditing(false);
     setEditedText("");
+    setEdited(false);
     complete("");
   }
 
   function handleRegenerate() {
     setIsEditing(false);
     setEditedText("");
+    setEdited(false);
     complete(instruction);
   }
 
@@ -54,6 +58,20 @@ export default function DraftPanel({ id }: { id: string }) {
   function handleEdit(){
     setEditedText(completion)
     setIsEditing(true);
+  }
+
+  // Saving writes the user's text into the hook's own state, so there stays
+  // exactly one copy of the letter. Copy, and later the citations, read
+  // `completion` and do not have to ask which version is the real one.
+  function handleSave(){
+    setCompletion(editedText);
+    setEdited(true);
+    setIsEditing(false);
+  }
+
+  function handleCancel(){
+    setEditedText("");
+    setIsEditing(false);
   }
 
   return (
@@ -104,22 +122,11 @@ export default function DraftPanel({ id }: { id: string }) {
         </button>
       </div>
 
-      {/* STEP 4 — the version strip. One chip per draft, in creation order:
-
-            <button
-              className={`version-chip ${draft.edited ? "version-chip--edited" : ""}`}
-              aria-current={draft.id === currentDraftId}
-              onClick={() => switchTo(draft)}
-            >
-              v{n}
-            </button>
-
-          Add version-chip--branch to a chip whose parentId is not the draft
-          before it, so a branch does not read as a straight line. */}
-      <div className="version-strip mt-4" />
-
-      {/* Add .draft-editing to this article while the letter is editable. */}
-      <article className="mt-4 rounded-lg border border-black/10 px-5 py-4 dark:border-white/15">
+      <article
+        className={`mt-4 rounded-lg border border-black/10 px-5 py-4 dark:border-white/15 ${
+          isEditing ? "draft-editing" : ""
+        }`}
+      >
       {isEditing ? (
     <textarea
       value={editedText}
@@ -135,13 +142,31 @@ export default function DraftPanel({ id }: { id: string }) {
     </div>
   )}
 
-        {/* Swaps in where the rendered letter is, once editing starts:
-            <textarea className="draft-editor" ... />
-            Same metrics as .draft-prose, so nothing moves. */}
-
         {/* STEP 3 — the affordances. Copy says "Copied" for about two seconds
-            and is disabled while text is still arriving. */}
+            and is disabled while text is still arriving. Editing replaces the
+            whole row: Copy and Edit make no sense while the pane is a
+            textarea. */}
         <div className="mt-4 flex items-center gap-2 border-t border-black/10 pt-3 dark:border-white/15">
+          {isEditing ? (
+            <>
+              <button
+                type="button"
+                disabled={editedText === completion}
+                onClick={handleSave}
+                className="rounded-full bg-foreground px-3 py-1.5 text-xs text-background hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="rounded-full border border-black/10 px-3 py-1.5 text-xs hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
           <button
             type="button"
              disabled={isLoading || !completion}
@@ -158,6 +183,12 @@ export default function DraftPanel({ id }: { id: string }) {
           >
             Edit
           </button>
+            </>
+          )}
+
+          {edited && !isEditing && (
+            <span className="ml-auto text-xs text-gray-500">Edited</span>
+          )}
         </div>
       </article>
     </section>
