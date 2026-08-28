@@ -14,7 +14,7 @@ import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { trimOpenMarker } from "@/app/lib/markdown/renderable";
 
-const FAKE = true;
+const FAKE = false;
 const STREAM_ERROR_MARKER = "[[error:stream_failed]]";
 
 function parseDraftStream(text: string) {
