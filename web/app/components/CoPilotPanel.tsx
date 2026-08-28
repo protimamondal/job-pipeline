@@ -58,10 +58,13 @@ function handleSubmit(e : FormEvent){
                   <div key={part.toolCallId}>preparing...</div>
                 )
               case "input-available" : {
-              const inputStream = part.input as searchJobInput2;
-              return(
-                <div key={part.toolCallId}>searching for {inputStream.title} in {inputStream.location}</div>
-              )
+                const args = part.input as searchJobInput2;
+                const live = status === "submitted" || status === "streaming";
+                  return live ? (
+                    <div key={part.toolCallId}>searching for {args.title} in {args.location}</div>
+                      ) : (
+                    <div key={part.toolCallId} className="text-gray-500">Search cancelled</div>
+                  );
               }
               case "output-available" : {
                 const output = part.output as serachResultObject2;

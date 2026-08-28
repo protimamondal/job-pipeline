@@ -20,6 +20,9 @@ export async function POST(req: Request) {
              ${job.description} and this is my profile ${profile}
 
              Return the cover letter itself.
+             - If you use something from the job description, add [[job]].
+            - If you use something from the profile, add [[profile]].
+            - Use only [[job]] and [[profile]].
              You may use markdown formatting like **bold**.
              Do not wrap the answer in triple backticks.
              Do not use a markdown code block.

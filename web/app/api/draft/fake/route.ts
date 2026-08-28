@@ -20,11 +20,19 @@ Protima`;
 export async function POST() {
   const stream = new ReadableStream<string>({
     async start(controller) {
-      for (const ch of text) {
+/*       for (const ch of text) {
         controller.enqueue(ch);
         await new Promise((r) => setTimeout(r, 200));
+      } */
+      for (const [i, ch] of [...text].entries()) {
+        if (i === 200) {
+        controller.enqueue("\n\n[[error:stream_failed]]");
+        break;
       }
-      controller.close();
+      controller.enqueue(ch);
+      await new Promise((r) => setTimeout(r, 25));
+}
+controller.close();
     },
   });
 

@@ -14,7 +14,7 @@ import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { trimOpenMarker } from "@/app/lib/markdown/renderable";
 
-const FAKE = false;
+const FAKE = true;
 const STREAM_ERROR_MARKER = "[[error:stream_failed]]";
 
 function parseDraftStream(text: string) {
@@ -33,12 +33,19 @@ function parseDraftStream(text: string) {
   };
 }
 
+  function renderCitations(text: string) {
+    return text
+      .replaceAll("[[job]]", " [job](#source-job)")
+      .replaceAll("[[profile]]", " [profile](#source-profile)");
+  }
+
 export default function DraftPanel({ id }: { id: string }) {
 
   const [instruction, setInstruction] = useState("");
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState("");
+  const [selectedSource, setSelectedSource] = useState<"job" | "profile" | null>(null);
 
 
   const [edited, setEdited] = useState(false);
@@ -50,10 +57,19 @@ export default function DraftPanel({ id }: { id: string }) {
   });
   const parsedDraft = parseDraftStream(completion);
 
-   function handleDraft() {
+  // Two ways a draft can stop early, and they arrive differently.
+  // The marker is the server telling us generation failed — it could still
+  // talk to us. If the connection itself broke there is no way to send the
+  // marker at all, and all we get is `error` plus whatever text had already
+  // landed. Both mean the same thing to the reader.
+  const stoppedEarly = parsedDraft.streamFailed || (!!error && !!completion);
+   const visibleDraft = renderCitations(parsedDraft.visibleText);
+
+  function handleDraft() {
     setIsEditing(false);
     setEditedText("");
     setEdited(false);
+    setSelectedSource(null);
     complete("");
   }
 
@@ -61,11 +77,12 @@ export default function DraftPanel({ id }: { id: string }) {
     setIsEditing(false);
     setEditedText("");
     setEdited(false);
+    setSelectedSource(null);
     complete(instruction);
   }
 
   async function handleCopy(){
-    const textToCopy = isEditing ? editedText : parsedDraft.visibleText;
+    const textToCopy = isEditing ? editedText : visibleDraft;
     await navigator.clipboard.writeText(textToCopy);
     setCopied(true)
     setTimeout(()=>{
@@ -73,8 +90,9 @@ export default function DraftPanel({ id }: { id: string }) {
     },2000)
   }
 
+
   function handleEdit(){
-    setEditedText(parsedDraft.visibleText)
+    setEditedText(visibleDraft)
     setIsEditing(true);
   }
 
@@ -154,10 +172,67 @@ export default function DraftPanel({ id }: { id: string }) {
   ) : (
     <div className="draft-prose">
       {isLoading && !completion && <p>Preparing draft…</p>}
-      <Streamdown isAnimating={isLoading}>
-        {trimOpenMarker(parsedDraft.visibleText, isLoading)}
+      <Streamdown
+        isAnimating={isLoading}
+        components={{
+          a({ href, children }) {
+            if (href === "#source-job") {
+              return (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSource("job")}
+                  className="mx-0.5 inline-flex rounded-full border border-black/15 px-1.5 py-0.5 text-[0.7rem] font-medium no-underline hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  {children}
+                </button>
+              );
+            }
+
+            if (href === "#source-profile") {
+              return (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSource("profile")}
+                  className="mx-0.5 inline-flex rounded-full border border-black/15 px-1.5 py-0.5 text-[0.7rem] font-medium no-underline hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  {children}
+                </button>
+              );
+            }
+
+            return <a href={href}>{children}</a>;
+          },
+        }}
+      >
+        {trimOpenMarker(visibleDraft, isLoading)}
       </Streamdown>
-      {parsedDraft.streamFailed && (
+      {completion && (
+        <div className="mt-4 grid gap-2 border-t border-black/10 pt-3 text-xs dark:border-white/15">
+          <p className="text-gray-500">Sources used by the draft</p>
+          <div
+            id="source-job"
+            className={`rounded-md border p-2 ${
+              selectedSource === "job"
+                ? "border-yellow-400 bg-yellow-50 ring-2 ring-yellow-300 dark:border-yellow-400/70 dark:bg-yellow-500/10"
+                : "border-black/10 dark:border-white/15"
+            }`}
+          >
+            <strong>[job]</strong> selected job description
+          </div>
+
+          <div
+            id="source-profile"
+            className={`rounded-md border p-2 ${
+              selectedSource === "profile"
+                ? "border-yellow-400 bg-yellow-50 ring-2 ring-yellow-300 dark:border-yellow-400/70 dark:bg-yellow-500/10"
+                : "border-black/10 dark:border-white/15"
+            }`}
+          >
+            <strong>[profile]</strong> candidate profile
+          </div>
+        </div>
+      )}
+      {stoppedEarly && !isLoading && (
         <div className="mt-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-900 dark:text-yellow-200">
           <p>The draft stopped before finishing. The text above is incomplete.</p>
           <button
