@@ -16,7 +16,8 @@ export default function CoPilotPanel() {
     sendMessage,
     status,
     error,
-    stop
+    stop,
+    regenerate
   } = useChat({
     transport : new DefaultChatTransport({
       api : "/api/chat"
@@ -92,7 +93,18 @@ function handleSubmit(e : FormEvent){
       </div>
 
    {status==="submitted" && <div className="mx-auto w-full max-w-2xl px-4 py-3 text-sm text-gray-500">Thinking...</div>}
-   {error && <div className="mx-auto w-full max-w-2xl px-4 py-3  text-red-700">Some problem occured</div>}
+   {error && (
+     <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+       <span>The copilot could not answer. The job search may be offline.</span>
+       <button
+         type="button"
+         onClick={() => regenerate()}
+         className="shrink-0 rounded-full border border-red-500/40 px-3 py-1.5 text-xs hover:bg-red-500/10"
+       >
+         Try again
+       </button>
+     </div>
+   )}
 
       <form onSubmit={handleSubmit} className="shrink-0 border-t border-black/10 p-3 dark:border-white/15">
         <div className="flex gap-2">
