@@ -29,7 +29,11 @@ jobs:
         run: npm run lint
 
       - name: Type check
-        run: npx tsc --noEmit
+        # next typegen writes the generated route/layout types (LayoutProps and
+        # friends) that tsc cannot resolve on its own.
+        run: |
+          npx next typegen
+          npx tsc --noEmit
 
       - name: Build
         run: npm run build
