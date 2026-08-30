@@ -1,5 +1,7 @@
 # AI Job Pipeline
 
+[![CI](https://github.com/protimamondal/job-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/protimamondal/job-pipeline/actions/workflows/ci.yml)
+
 A job-application product with two AI features built into it: a **copilot** that
 searches jobs through a Model Context Protocol tool and renders the tool's
 progress as UI, and a **cover-letter assistant** that streams markdown and links
