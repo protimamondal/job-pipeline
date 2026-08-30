@@ -3,18 +3,19 @@
 
 import { createMCPClient } from "@ai-sdk/mcp";
 import { openai } from "@ai-sdk/openai";
-import { convertToModelMessages, createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, UIMessage } from "ai";
+import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, UIMessage } from "ai";
 
 // build fails on them, so this keeps the route valid until then.
 
 export async function POST(req : Request){
 
     const {messages} : {messages : UIMessage[]} = await req.json();
+    const mcpServerUrl = process.env.MCP_SERVER_URL ?? "http://127.0.0.1:8001/mcp";
 
 const mcpClient = await createMCPClient({
     transport : {
         type : "http",
-        url : "http://127.0.0.1:8001/mcp"
+        url : mcpServerUrl
     }
 })
 
@@ -38,4 +39,3 @@ const result = streamText({
         })
 })
 }
-

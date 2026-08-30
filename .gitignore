@@ -1,0 +1,21 @@
+# secrets — repo-wide safety net
+.env
+.env.*
+!.env.example
+
+# node
+node_modules/
+.next/
+out/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+
+# editors / os
+.DS_Store
+.vscode/

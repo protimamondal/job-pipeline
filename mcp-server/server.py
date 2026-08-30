@@ -1,3 +1,5 @@
+import os
+
 from mcp.server import MCPServer
 
 mcp = MCPServer("jobs server")
@@ -24,8 +26,8 @@ def search_job(title : str,location:str) -> list[dict]:
 if __name__ == "__main__":
     mcp.run(
        transport= "streamable-http",
-       host="127.0.0.1",
-       port = 8001,
+       host="0.0.0.0",
+       port=int(os.environ.get("PORT", "8001")),
        stateless_http= True,
        json_response=True,
     )

@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: job-pipeline-mcp
+    runtime: docker
+    rootDir: mcp-server
+    dockerfilePath: ./Dockerfile
+    plan: free

@@ -2,7 +2,7 @@
 // Skeleton only: layout and styling, static placeholder markup.
 // You write the grouping and the mapping over `jobs`.
 
-import { JobStatus, Job, jobs, jobsByStatus } from "./lib/data/jobs";
+import { JobStatus, jobs, jobsByStatus } from "./lib/data/jobs";
 import Link from "next/link";
 
 export default function PipelinePage() {
