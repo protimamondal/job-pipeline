@@ -12,8 +12,8 @@ hand in Python — not a wrapper around a library example.
 
 | | |
 |---|---|
-| **Live app** | _add the Vercel URL after deploying_ |
-| **MCP endpoint** | _add the Render URL after deploying_ |
+| **Live app** | <https://job-pipeline-weld.vercel.app> |
+| **MCP endpoint** | <https://job-pipeline-mcp.onrender.com/mcp> |
 | **Stack** | Next.js 16, React 19, TypeScript, Vercel AI SDK 7, Tailwind 4, Python 3.13, MCP 2.0 |
 
 > The job listings and the MCP search results are fixed sample data. The AI
