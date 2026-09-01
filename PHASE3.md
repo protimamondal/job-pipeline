@@ -34,13 +34,24 @@ limiting, or queued work has a demonstrated purpose. The existing
 
 ## Sub-phases
 
+The status and checkboxes in this file are the implementation source of truth.
+Update them in the same commit as the related code so a new Codex session can
+recover the current product status from the repository and Git history.
+
 ### 0 — Boundary and skeleton
 
 **Status:** Not started
 
-**Build:** Decide which responsibilities move from Next.js to FastAPI. Create
-`backend/` with settings, application factory/lifespan, `/health`, CORS, request
-IDs, structured logging, and a first test.
+**Implementation checklist:**
+
+- [ ] Record what remains in Next.js and what moves to FastAPI.
+- [ ] Create the `backend/` Python project and application package.
+- [ ] Add typed environment settings.
+- [ ] Add the FastAPI application lifecycle and `/health` endpoint.
+- [ ] Add configured CORS, request IDs, and structured logging.
+- [ ] Add and pass the first automated test.
+- [ ] Configure the web app to call the backend `/health` endpoint.
+- [ ] Run the complete acceptance check and mark this sub-phase complete.
 
 **Acceptance:** A deployment-style FastAPI process starts, its test passes, and
 the web app can call `/health`.
