@@ -12,8 +12,11 @@ tracking are handled separately in the study repository.
   matching checklist below.
 - Protima implements one manageable task at a time. The coding agent explains,
   reviews, tests, and debugs unless explicitly asked to write the whole slice.
-- Familiar backend concepts stay concise. New Python and FastAPI mechanics are
-  explained at implementation depth when introduced.
+- Do not assume backend fluency here. Explain backend fundamentals whenever
+  Protima asks, using senior-engineer language and frontend analogies where
+  useful.
+- Explain Python and FastAPI mechanics at implementation depth when introduced;
+  both Protima and Rahul are new to this stack.
 
 ## Target architecture
 
