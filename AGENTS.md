@@ -19,6 +19,7 @@ Before Phase 3 work, read [`PHASE3.md`](PHASE3.md). When the user says
 5. Run the relevant tests and acceptance check before marking a sub-phase
    complete.
 
-Protima owns and drives this product. Rahul's changes should use a branch and
-pull request. Instructions in nested `AGENTS.md` files also apply within their
+Protima owns and drives this product. Work directly on `main`; do not create
+feature branches or pull requests unless the user explicitly reverses this
+rule. Instructions in nested `AGENTS.md` files also apply within their
 directories.
