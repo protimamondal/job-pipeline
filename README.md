@@ -71,6 +71,16 @@ web/          Next.js frontend and both API routes
 mcp-server/   Python MCP 2.0 server exposing the job-search tool
 ```
 
+## Phase 3
+
+Phase 3 is now open. It will move persistence, authentication, and AI
+orchestration into a FastAPI service while keeping this frontend as the product
+UI. Work is divided into small vertical sub-phases with an acceptance check for
+each one; implementation has not started yet.
+
+See [PHASE3.md](PHASE3.md) for the ordered implementation map and session
+workflow.
+
 ## Run it locally
 
 Requires Node.js 22+, Python 3.13+, [uv](https://docs.astral.sh/uv/), and an
