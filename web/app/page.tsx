@@ -4,6 +4,7 @@
 
 import { JobStatus, jobs, jobsByStatus } from "./lib/data/jobs";
 import Link from "next/link";
+import BackendHealth from "./components/BackendHealth";
 
 export default function PipelinePage() {
   //const [jobsList, setJobsList] = useState<Job[]>(jobs)
@@ -25,6 +26,7 @@ export default function PipelinePage() {
 
   return (
     <main className="mx-auto max-w-3xl p-6">
+      <BackendHealth />
       <h1 className="mb-6 text-xl font-semibold">My pipeline</h1>
 
       {/* one group per status â€” repeat this section per group */}

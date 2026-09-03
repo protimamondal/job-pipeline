@@ -43,21 +43,40 @@ recover the current product status from the repository and Git history.
 
 ### 0 — Boundary and skeleton
 
-**Status:** Not started
+**Status:** Complete
+
+**Boundary record:**
+
+| Stays in Next.js for now | Moves to FastAPI |
+|---|---|
+| Existing UI pages and React components. | New `backend/` service. |
+| Current job list/detail rendering. | `/health` endpoint. |
+| Current draft and copilot UI behavior. | Environment settings. |
+| Existing Next.js API routes until their later sub-phases move them. | CORS, request IDs, and structured logging. |
+|  | Later sub-phases: jobs/Postgres, auth, draft streaming, and copilot/tool orchestration. |
 
 **Implementation checklist:**
 
-- [ ] Record what remains in Next.js and what moves to FastAPI.
-- [ ] Create the `backend/` Python project and application package.
-- [ ] Add typed environment settings.
-- [ ] Add the FastAPI application lifecycle and `/health` endpoint.
-- [ ] Add configured CORS, request IDs, and structured logging.
-- [ ] Add and pass the first automated test.
-- [ ] Configure the web app to call the backend `/health` endpoint.
-- [ ] Run the complete acceptance check and mark this sub-phase complete.
+- [x] Record what remains in Next.js and what moves to FastAPI.
+- [x] Create the `backend/` Python project and application package.
+- [x] Add typed environment settings.
+- [x] Add the FastAPI application lifecycle and `/health` endpoint.
+- [x] Add configured CORS, request IDs, and structured logging.
+- [x] Add and pass the first automated test.
+- [x] Configure the web app to call the backend `/health` endpoint.
+- [x] Run the complete acceptance check and mark this sub-phase complete.
 
 **Acceptance:** A deployment-style FastAPI process starts, its test passes, and
 the web app can call `/health`.
+
+**Carried-forward work:** Request logging is not yet structured. The middleware
+in `backend/app/main.py` passes `request_id`, `method`, `path`, and
+`status_code` via `logging`'s `extra=`, but the configured format string
+(`%(levelname)s %(name)s %(message)s`) references none of those keys, so the
+fields are silently dropped and lines log as `INFO job_pipeline
+request_completed`. The request ID still reaches the response header. Resolve
+before or alongside sub-phase 3, where correlating logs with Langfuse traces
+depends on it.
 
 ### 1 — Postgres job slice
 

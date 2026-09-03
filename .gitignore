@@ -19,3 +19,6 @@ __pycache__/
 # editors / os
 .DS_Store
 .vscode/
+
+# browser automation scratch
+.patchright-cli/
