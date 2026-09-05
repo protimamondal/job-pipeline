@@ -18,6 +18,10 @@ hand in Python — not a wrapper around a library example.
 
 > The job listings and the MCP search results are fixed sample data. The AI
 > calls, the streaming, the tool protocol and the failure handling are all real.
+>
+> The MCP server runs on Render's free tier, which sleeps after ~15 minutes of
+> no traffic. A scheduled workflow pings it to keep it warm, but if the copilot's
+> first job search takes a while, that is a cold start rather than a hang.
 
 ## What is actually interesting here
 
