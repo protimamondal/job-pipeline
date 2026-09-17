@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     app_name: str = "AI Job Pipeline API"
     environment: Literal["local", "test", "production"] = "local"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    database_url: str 
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -7,6 +7,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.settings import get_settings
+from app.routers import jobs
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,6 +25,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(jobs.router)
 
 settings = get_settings()
 
