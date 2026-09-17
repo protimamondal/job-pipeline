@@ -80,14 +80,48 @@ depends on it.
 
 ### 1 — Postgres job slice
 
-**Status:** Not started
+**Status:** Complete
 
 **Build:** Add Pydantic contracts, a FastAPI dependency for the async database
 session, Postgres models, Alembic migrations, seed data, `GET /jobs`, and
 `GET /jobs/{id}`. Replace the frontend's TypeScript job stubs with these APIs.
 
+**Implementation checklist:**
+
+- [x] Run Postgres locally and add SQLAlchemy, asyncpg, and Alembic.
+- [x] Add the typed `database_url` setting and the `.env` template.
+- [x] Add the API contracts in `app/api_schemas.py`.
+- [x] Add the `jobs` table in `app/db_models.py`.
+- [x] Add the engine, session factory, and request-scoped session dependency in
+      `app/db.py`.
+- [x] Configure Alembic, generate the first migration, and apply it.
+- [x] Seed the seven jobs from the retired frontend stub.
+- [x] Add `GET /jobs` and `GET /jobs/{id}`, including the 404 path.
+- [x] Add endpoint tests against a separate test database.
+- [x] Point the job list, job detail, and draft route at the backend and delete
+      the stub rows.
+- [x] Run the complete acceptance check and mark this sub-phase complete.
+
 **Acceptance:** The existing job list and detail screens read from
 FastAPI/Postgres.
+
+**Local setup notes:** Postgres runs in Docker on host port **5433**, because a
+pre-existing Windows PostgreSQL 16 service occupies 5432. Data lives in the
+`job_pipeline_pgdata` volume, so the container is disposable.
+
+```powershell
+docker run --name job-pipeline-pg -e POSTGRES_USER=job_pipeline -e POSTGRES_PASSWORD=devpassword -e POSTGRES_DB=job_pipeline -p 5433:5432 -v job_pipeline_pgdata:/var/lib/postgresql/data -d postgres:17
+uv run alembic upgrade head
+uv run python seed.py
+```
+
+Tests use a separate `job_pipeline_test` database and swap the session via
+`app.dependency_overrides`, so they never touch development data.
+
+**Carried-forward work:** The test fixtures build tables with
+`Base.metadata.create_all` rather than running the migrations, so a broken
+migration would not fail the suite. Resolve in sub-phase 6, where integration
+tests and deploy-time migrations are in scope.
 
 ### 2 — Authentication and user pipeline
 
