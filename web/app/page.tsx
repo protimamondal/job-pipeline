@@ -2,12 +2,28 @@
 // Skeleton only: layout and styling, static placeholder markup.
 // You write the grouping and the mapping over `jobs`.
 
-import { JobStatus, jobs, jobsByStatus } from "./lib/data/jobs";
+import { JobStatus, Job, jobsByStatus } from "./lib/data/jobs";
+import { fetchJobs } from "./lib/jobsApi";
 import Link from "next/link";
 import BackendHealth from "./components/BackendHealth";
 
-export default function PipelinePage() {
+export default async function PipelinePage() {
   //const [jobsList, setJobsList] = useState<Job[]>(jobs)
+
+  let jobs : Job[];
+   try{
+    jobs = await fetchJobs();
+   }catch{
+     return (
+      <main className="mx-auto max-w-3xl p-6">
+        <BackendHealth />
+        <h1 className="mb-6 text-xl font-semibold">My pipeline</h1>
+        <p className="text-sm text-gray-500">
+          Could not load jobs — the backend is not reachable.
+        </p>
+      </main>
+    );
+   }
 
   const ORDER : JobStatus[] = ["interviewing","applied","saved",
     "rejected"

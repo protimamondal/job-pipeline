@@ -1,4 +1,4 @@
-import { jobs } from "@/app/lib/data/jobs";
+import { fetchJob } from "@/app/lib/jobsApi";
 import { profile } from "@/app/lib/data/profile";
 import { openai } from "@ai-sdk/openai";
 import { createTextStreamResponse, streamText } from "ai";
@@ -8,7 +8,7 @@ const STREAM_ERROR_MARKER = "\n\n[[error:stream_failed]]";
 export async function POST(req: Request) {
   const { id,prompt } = await req.json();
 
-  const job = jobs.find((job) => job.id === id);
+  const job = await fetchJob(Number(id));
   if (!job) {
     return new Response(`No job with id ${id}`, { status: 404 });
   }

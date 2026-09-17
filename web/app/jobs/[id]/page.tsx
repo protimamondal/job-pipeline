@@ -3,9 +3,9 @@
 // You write the params handling and the lookup in `jobs`.
 
 import Link from "next/link";
-import { jobs } from "@/app/lib/data/jobs";
 import { notFound } from "next/navigation";
 import DraftPanel from "@/app/components/DraftPanel";
+import { fetchJob } from "@/app/lib/jobsApi";
 
 type JobDesc = {
   params : Promise<{id : string}>
@@ -16,7 +16,8 @@ export default async function JobPage({params}: JobDesc) {
 
   const {id} = await params
 
-const jobWithId = jobs.find(job=>job.id === id)
+const jobWithId = await fetchJob(Number(id))
+
 
 if(!jobWithId){
   notFound();
