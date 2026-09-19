@@ -14,4 +14,3 @@ class JobRead(BaseModel):
     salary_usd: int | None
     url: str | None
     description: str
-    status: JobStatus

@@ -9,7 +9,7 @@ from seed_data import JOBS
 
 async def main() -> None:
     async with SessionLocal() as session:
-        await session.execute(text("TRUNCATE TABLE jobs RESTART IDENTITY"))
+        await session.execute(text("TRUNCATE TABLE jobs, applications RESTART IDENTITY"))
         session.add_all([Job(**data) for data in JOBS])
         await session.commit()
 

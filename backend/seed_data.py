@@ -7,7 +7,6 @@ JOBS = [
         'location': 'Bengaluru',
         'salary_usd': 128000,
         'url': None,
-        'status': 'interviewing',
         "description": """We are hiring a senior frontend engineer to own our customer-facing dashboard end to end.
 
 You will lead the migration of a large React codebase to the App Router, and set the patterns the rest of the team follows.
@@ -24,7 +23,6 @@ Experience mentoring engineers and running design reviews is strongly preferred.
         'location': 'Remote (India)',
         'salary_usd': 165000,
         'url': None,
-        'status': 'interviewing',
         "description": """Cobalt Health builds scheduling and records software used by around four hundred clinics.
 
 This role owns the web platform: the design system, the build pipeline, and the shared component library that six product teams depend on. You are not shipping features week to week — you are making it possible for other people to ship them safely.
@@ -43,7 +41,6 @@ We are fully remote and asynchronous. Strong written communication matters more 
         'location': 'Pune',
         'salary_usd': None,
         'url': None,
-        'status': 'applied',
         "description": """We are a small product studio building AI features inside other companies' products, and we are looking for a frontend engineer who thinks the interface is the hard part.
 
 Most of our work is the same shape: a model produces something slowly and imperfectly, and a person has to be able to trust it, correct it, and move on. Streaming text, partial failures, citations back to source material, edit-and-retry flows. If you have opinions about what a good loading state looks like when the wait is fifteen seconds, we want to talk to you.
@@ -60,7 +57,6 @@ Salary is negotiated per person and depends heavily on experience, so we have no
         'location': 'Bengaluru',
         'salary_usd': 112000,
         'url': None,
-        'status': 'applied',
         "description": """Meridian moves shipping containers. This role builds the software our operations team uses to do that.
 
 The users are forty people in one building who use your software for eight hours a day and will tell you immediately when it is bad. That feedback loop is the best part of the job.
@@ -75,7 +71,6 @@ We are a Rails shop moving the frontend to React incrementally. You would be the
         'location': 'Remote',
         'salary_usd': 96000,
         'url': None,
-        'status': 'saved',
         "description": """Small team, early product, broad role. You would write frontend most days and backend when it is in the way.
 
 We are looking for someone who is comfortable making product decisions rather than waiting for a specification.""",
@@ -86,7 +81,6 @@ We are looking for someone who is comfortable making product decisions rather th
         'location': 'Hyderabad',
         'salary_usd': 134000,
         'url': None,
-        'status': 'saved',
         "description": """Enterprise data visualisation. Large tables, large charts, customers who care about export fidelity.
 
 The work is performance-heavy: rendering tens of thousands of rows without the interface stuttering.""",
@@ -97,7 +91,6 @@ The work is performance-heavy: rendering tens of thousands of rows without the i
         'location': 'Mumbai',
         'salary_usd': 145000,
         'url': None,
-        'status': 'rejected',
         "description": """Leading a team of four on a consumer marketplace app.
 
 Half the role is people management and roadmap; half is still writing code.""",
