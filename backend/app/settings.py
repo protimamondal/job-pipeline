@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     environment: Literal["local", "test", "production"] = "local"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     database_url: str 
+    jwt_secret: str
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
 
     model_config = SettingsConfigDict(
         env_file=".env",
