@@ -4,13 +4,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api_schemas import JobRead
 from app.db import get_session
-from app.db_models import Job
+from app.db_models import Job, User
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 @router.get("", response_model=list[JobRead])
-async def list_jobs(session: AsyncSession = Depends(get_session)) -> list[Job]:
+async def list_jobs(
+    cur_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[Job]:
     result = await session.execute(select(Job).order_by(Job.id))
     return list(result.scalars().all())
 
@@ -18,6 +22,7 @@ async def list_jobs(session: AsyncSession = Depends(get_session)) -> list[Job]:
 @router.get("/{job_id}", response_model=JobRead)
 async def get_job(
     job_id: int,
+    cur_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Job:
     job = await session.get(Job, job_id)

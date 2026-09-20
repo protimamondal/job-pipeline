@@ -45,3 +45,39 @@ def client() -> Iterator[TestClient]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def register_user(client: TestClient):
+    """Register a user, log them in, and return their Authorization header.
+
+    Call it more than once with different emails to act as different people
+    in the same test.
+    """
+
+    def _register(
+        email: str = "protima@example.com",
+        password: str = "devpassword",
+        name: str = "Protima",
+    ) -> dict[str, str]:
+        created = client.post(
+            "/auth/register",
+            json={"name": name, "email": email, "password": password},
+        )
+        assert created.status_code == 201, created.text
+
+        logged_in = client.post(
+            "/auth/login", json={"email": email, "password": password}
+        )
+        assert logged_in.status_code == 200, logged_in.text
+
+        token = logged_in.json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    return _register
+
+
+@pytest.fixture
+def auth_headers(register_user) -> dict[str, str]:
+    """The Authorization header for one logged-in user."""
+    return register_user()
