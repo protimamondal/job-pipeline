@@ -6,6 +6,7 @@ from app.api_schemas import UserCreate, UserRead, UserLogin, Token
 from app.db import get_session
 from app.db_models import User
 from app.security import hash_password, verify_password, create_access_token
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/auth",tags=["auth"])
 
@@ -34,3 +35,8 @@ async def login_user(payload: UserLogin, session: AsyncSession = Depends(get_ses
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token(str(user.id))
     return Token(access_token=token)
+
+
+@router.get("/me", response_model=UserRead)
+async def read_current_user(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
