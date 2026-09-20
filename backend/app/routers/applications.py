@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api_schemas import ApplicationRead, ApplicationCreate
+from app.api_schemas import ApplicationRead, ApplicationCreate, ApplicationUpdate
 from app.db import get_session
 from app.db_models import Application, User, Job
 from app.dependencies import get_current_user
@@ -47,3 +47,54 @@ async def create_application(
     await session.commit()
     await session.refresh(application)
     return application
+
+async def get_owned_application(
+    application_id: int,
+    cur_user: User,
+    session: AsyncSession,
+) -> Application:
+    """Load one application, but only if it belongs to this user.
+
+    Another user's row is reported as missing rather than forbidden, so the
+    endpoint never confirms that an id exists.
+    """
+    result = await session.execute(
+        select(Application).where(
+            Application.id == application_id,
+            Application.user_id == cur_user.id,
+        )
+    )
+    application = result.scalar_one_or_none()
+    if application is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return application
+
+
+@router.patch("/{application_id}", response_model=ApplicationRead)
+async def update_application(
+    application_id: int,
+    payload: ApplicationUpdate,
+    cur_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Application:
+    application = await get_owned_application(application_id, cur_user, session)
+
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(application, field, value)
+
+    await session.commit()
+    await session.refresh(application)
+    return application
+
+
+@router.delete("/{application_id}", status_code=204)
+async def delete_application(
+    application_id: int,
+    cur_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    application = await get_owned_application(application_id, cur_user, session)
+
+    await session.delete(application)
+    await session.commit()
