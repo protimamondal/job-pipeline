@@ -1,0 +1,42 @@
+name: Keep MCP server warm
+
+# Render's free tier stops a service after ~15 minutes with no traffic, and the
+# next request then waits for a cold start — measured at 90 seconds on this
+# service. That is long enough that a visitor trying the copilot concludes it is
+# broken. This pings the endpoint often enough that it rarely sleeps.
+#
+# GitHub's scheduled runs are best-effort and can be delayed under load, so this
+# reduces cold starts rather than eliminating them. The README says so plainly.
+# Note also that GitHub disables scheduled workflows on a public repository after
+# 60 days with no activity.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping the MCP endpoint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the server
+        run: |
+          URL="https://job-pipeline-mcp.onrender.com/mcp"
+
+          # A real MCP initialize call, not a bare GET — this exercises the
+          # actual request path rather than only proving the host resolves.
+          CODE=$(curl -s -o /tmp/body -w '%{http_code}' -m 120 -X POST "$URL" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                  "protocolVersion":"2025-06-18","capabilities":{},
+                  "clientInfo":{"name":"keepalive","version":"1"}}}')
+
+          echo "HTTP $CODE"
+          head -c 300 /tmp/body || true
+          echo
+
+          if [ "$CODE" != "200" ]; then
+            echo "::warning::MCP endpoint returned HTTP $CODE"
+          fi
