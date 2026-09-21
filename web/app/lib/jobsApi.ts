@@ -1,27 +1,41 @@
 import { backendBaseUrl } from "./backend";
 import type { Job } from "@/app/lib/data/jobs";
 
-
-export async function fetchJobs() : Promise<Job[]> {
-    const response = await fetch(`${backendBaseUrl}/jobs`,{cache: "no-store"})
-    if(!response.ok){
-        throw new Error(`GET /jobs failed with ${response.status}`)
-    }
-
-    return response.json();
+/** The backend protects every job route, so callers must pass a token. */
+function authHeaders(token: string) {
+  return { Authorization: `Bearer ${token}` };
 }
 
-export async function fetchJob(id : number) : Promise<Job | null> {
-    const result = await fetch(`${backendBaseUrl}/jobs/${id}`, { cache: "no-store" });
+export async function fetchJobs(token: string): Promise<Job[]> {
+  const response = await fetch(`${backendBaseUrl}/jobs`, {
+    cache: "no-store",
+    headers: authHeaders(token),
+  });
 
-    // A missing job is an expected outcome, not a failure.
-    if(result.status === 404){
-        return null;
-    }
+  if (!response.ok) {
+    throw new Error(`GET /jobs failed with ${response.status}`);
+  }
 
-    if(!result.ok){
-        throw new Error(`GET /jobs/${id} failed with ${result.status}`)
-    }
+  return response.json();
+}
 
-    return result.json()
+export async function fetchJob(
+  id: number,
+  token: string,
+): Promise<Job | null> {
+  const result = await fetch(`${backendBaseUrl}/jobs/${id}`, {
+    cache: "no-store",
+    headers: authHeaders(token),
+  });
+
+  // A missing job is an expected outcome, not a failure.
+  if (result.status === 404) {
+    return null;
+  }
+
+  if (!result.ok) {
+    throw new Error(`GET /jobs/${id} failed with ${result.status}`);
+  }
+
+  return result.json();
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import CoPilotPanel from "./components/CoPilotPanel";
+import { getToken } from "./lib/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +19,11 @@ export const metadata: Metadata = {
   description: "Track applications, draft letters",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // The copilot belongs to a signed-in session, so it stays off the sign-in
+  // and create-account pages.
+  const signedIn = (await getToken()) !== null;
+
   return (
     <html
       lang="en"
@@ -27,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full">
         <div className="flex min-h-screen">
           <div className="min-w-0 flex-1">{children}</div>
-          <CoPilotPanel />
+          {signedIn && <CoPilotPanel />}
         </div>
       </body>
     </html>

@@ -1,4 +1,5 @@
 import { fetchJob } from "@/app/lib/jobsApi";
+import { getToken } from "@/app/lib/auth";
 import { profile } from "@/app/lib/data/profile";
 import { openai } from "@ai-sdk/openai";
 import { createTextStreamResponse, streamText } from "ai";
@@ -8,7 +9,12 @@ const STREAM_ERROR_MARKER = "\n\n[[error:stream_failed]]";
 export async function POST(req: Request) {
   const { id,prompt } = await req.json();
 
-  const job = await fetchJob(Number(id));
+  const token = await getToken();
+  if (token === null) {
+    return new Response("Not authenticated", { status: 401 });
+  }
+
+  const job = await fetchJob(Number(id), token);
   if (!job) {
     return new Response(`No job with id ${id}`, { status: 404 });
   }

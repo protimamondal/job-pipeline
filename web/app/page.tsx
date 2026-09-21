@@ -1,75 +1,52 @@
-// PAGE 1 â€” the pipeline list.
-// Skeleton only: layout and styling, static placeholder markup.
-// You write the grouping and the mapping over `jobs`.
+// The job board: every job that exists, not just the ones you track.
+// "My pipeline" reads /applications instead, and arrives in a later slice.
 
-import { JobStatus, Job, jobsByStatus } from "./lib/data/jobs";
-import { fetchJobs } from "./lib/jobsApi";
 import Link from "next/link";
+
 import BackendHealth from "./components/BackendHealth";
+import { requireToken } from "./lib/auth";
+import { fetchJobs } from "./lib/jobsApi";
+import type { Job } from "./lib/data/jobs";
 
-export default async function PipelinePage() {
-  //const [jobsList, setJobsList] = useState<Job[]>(jobs)
+export default async function JobBoardPage() {
+  const token = await requireToken();
 
-  let jobs : Job[];
-   try{
-    jobs = await fetchJobs();
-   }catch{
-     return (
+  let jobs: Job[];
+  try {
+    jobs = await fetchJobs(token);
+  } catch {
+    return (
       <main className="mx-auto max-w-3xl p-6">
         <BackendHealth />
-        <h1 className="mb-6 text-xl font-semibold">My pipeline</h1>
+        <h1 className="mb-6 text-xl font-semibold">Jobs</h1>
         <p className="text-sm text-gray-500">
           Could not load jobs — the backend is not reachable.
         </p>
       </main>
     );
-   }
-
-  const ORDER : JobStatus[] = ["interviewing","applied","saved",
-    "rejected"
-  ]
-
-  const jobList  = jobs.reduce<jobsByStatus>((acc,cur)=>{
-    acc[cur.status].push(cur)
-    return acc;
-  },{
-    interviewing : [],
-    applied : [],
-    saved : [],
-    rejected : [],
-  })
-  
+  }
 
   return (
     <main className="mx-auto max-w-3xl p-6">
       <BackendHealth />
-      <h1 className="mb-6 text-xl font-semibold">My pipeline</h1>
+      <h1 className="mb-1 text-xl font-semibold">Jobs</h1>
+      <p className="mb-6 text-sm text-gray-500">{jobs.length} open roles</p>
 
-      {/* one group per status â€” repeat this section per group */}
-      {ORDER.map(status=>{
-        const rows = jobList[status]
-        return (
-        <section key={status} className="mb-8">
-        <h2 className="mb-2 border-b border-black/10 pb-1 text-xs uppercase tracking-wide text-gray-500 dark:border-white/15">
-          {status} - {rows.length}
-        </h2>
-
-        {/* one of these per job */}
-        {
-          rows.map(row=>(
-        <Link key={row.id} href={`/jobs/${row.id}`} className="block rounded-lg px-3 py-2.5 hover:bg-black/5 dark:hover:bg-white/10">
-          <div className="font-medium">{row.title}</div>
-          <div className="text-sm text-gray-500"  >
-            {row.company} . {row.location} . {row.salary_usd !== null ? `$${row.salary_usd.toLocaleString()}` : "salary not listed"}
+      {jobs.map((job) => (
+        <Link
+          key={job.id}
+          href={`/jobs/${job.id}`}
+          className="block rounded-lg px-3 py-2.5 hover:bg-black/5 dark:hover:bg-white/10"
+        >
+          <div className="font-medium">{job.title}</div>
+          <div className="text-sm text-gray-500">
+            {job.company} · {job.location} ·{" "}
+            {job.salary_usd !== null
+              ? `$${job.salary_usd.toLocaleString()}`
+              : "salary not listed"}
           </div>
         </Link>
-          ))
-        }
-
-      </section>
-        )
-})}
-    
+      ))}
     </main>
   );
 }

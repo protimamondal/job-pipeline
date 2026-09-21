@@ -10,10 +10,6 @@ export type Job = {
   // added for this phase
   id: number;
   description: string;
-  status: JobStatus;
 };
 
-export type jobsByStatus = Record<JobStatus,Job[]>
-
-
-
+export type jobsByStatus = Record<JobStatus, Job[]>;
