@@ -17,7 +17,8 @@ def test_track_a_job(client: TestClient, auth_headers: dict[str, str]) -> None:
 
     assert response.status_code == 201
     body = response.json()
-    assert body["job_id"] == 2
+    assert body["job"]["id"] == 2
+    assert body["job"]["company"] == "Cobalt Health"
     assert body["status"] == "saved"
     assert "user_id" not in body
 

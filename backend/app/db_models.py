@@ -1,5 +1,5 @@
 from sqlalchemy import Text , ForeignKey, func ,UniqueConstraint, DateTime
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from datetime import datetime
 
 
@@ -39,3 +39,7 @@ class Application(Base):
     notes: Mapped[str | None]
     created_at: Mapped[datetime] = mapped_column( DateTime(timezone=True),server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column( DateTime(timezone=True),server_default=func.now(), onupdate=func.now())
+
+    # The job this application is about. Async sessions cannot lazy load, so
+    # every query that reads `.job` has to ask for it up front.
+    job: Mapped["Job"] = relationship(lazy="raise")

@@ -51,7 +51,7 @@ class ApplicationUpdate(BaseModel):
 class ApplicationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id : int
-    job_id : int
+    job: JobRead
     status: JobStatus
     notes: str | None
     created_at: datetime

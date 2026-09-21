@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api_schemas import ApplicationRead, ApplicationCreate, ApplicationUpdate
 from app.db import get_session
@@ -13,8 +14,12 @@ router = APIRouter(prefix="/applications",tags=["application"])
 async def list_applications(
     cur_user:User = Depends(get_current_user), 
     session:AsyncSession = Depends(get_session))->list[Application]:
-    result = await session.execute(select(Application).where(Application.user_id==cur_user.id)
-                             .order_by(Application.id))
+    result = await session.execute(
+        select(Application)
+        .where(Application.user_id == cur_user.id)
+        .options(selectinload(Application.job))
+        .order_by(Application.id)
+    )
     return list(result.scalars().all())
 
 @router.post("",response_model=ApplicationRead,status_code=201)
@@ -46,6 +51,7 @@ async def create_application(
     session.add(application)
     await session.commit()
     await session.refresh(application)
+    await session.refresh(application, attribute_names=["job"])
     return application
 
 async def get_owned_application(
@@ -59,10 +65,12 @@ async def get_owned_application(
     endpoint never confirms that an id exists.
     """
     result = await session.execute(
-        select(Application).where(
+        select(Application)
+        .where(
             Application.id == application_id,
             Application.user_id == cur_user.id,
         )
+        .options(selectinload(Application.job))
     )
     application = result.scalar_one_or_none()
     if application is None:
@@ -85,6 +93,7 @@ async def update_application(
 
     await session.commit()
     await session.refresh(application)
+    await session.refresh(application, attribute_names=["job"])
     return application
 
 
