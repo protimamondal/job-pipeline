@@ -4,9 +4,11 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import AddToPipeline from "@/app/components/AddToPipeline";
 import DraftPanel from "@/app/components/DraftPanel";
 import { fetchJob } from "@/app/lib/jobsApi";
 import { requireToken } from "@/app/lib/auth";
+import { fetchApplications } from "@/app/lib/applicationsApi";
 
 type JobDesc = {
   params : Promise<{id : string}>
@@ -19,6 +21,7 @@ export default async function JobPage({params}: JobDesc) {
   const token = await requireToken()
 
 const jobWithId = await fetchJob(Number(id), token)
+const applications = await fetchApplications(token)
 
 
 if(!jobWithId){
@@ -33,6 +36,11 @@ if(!jobWithId){
 
       <h1 className="mt-3 text-xl font-semibold">{jobWithId.title}</h1>
       <div className="text-sm text-gray-500">{jobWithId.company} · {jobWithId.location} · {jobWithId.salary_usd !== null ? `$${jobWithId.salary_usd.toLocaleString()}` : "salary not listed"}</div>
+
+      <AddToPipeline
+        jobId={jobWithId.id}
+        tracked={applications.some((a) => a.job.id === jobWithId.id)}
+      />
 
       <h2 className="mt-8 text-xs uppercase tracking-wide text-gray-500">
         Job description

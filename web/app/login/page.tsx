@@ -29,6 +29,9 @@ export default function LoginPage() {
       }
 
       router.push("/");
+      // The root layout decides whether to show the copilot by reading the
+      // cookie, and a client-side navigation would reuse the signed-out one.
+      router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not sign in.");
     } finally {
