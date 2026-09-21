@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -9,15 +10,25 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const router = useRouter();
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
 
     try {
-      // INTEGRATION: POST { email, password } to /auth/login, keep the
-      // returned access_token, then send the user to "/".
-      throw new Error("Not connected to the backend yet.");
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Invalid email or password.");
+      }
+
+      router.push("/");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not sign in.");
     } finally {
