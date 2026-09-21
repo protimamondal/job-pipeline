@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function RegisterPage() {
@@ -10,16 +11,28 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const router = useRouter();
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
 
     try {
-      // INTEGRATION: POST { name, email, password } to /auth/register, then
-      // either log in with the same credentials or send the user to /login.
-      // A 409 means the email is already registered.
-      throw new Error("Not connected to the backend yet.");
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const body = await response.json();
+
+      if (!response.ok) {
+        throw new Error(body.detail ?? "Could not create the account.");
+      }
+
+      router.push(body.signedIn ? "/" : "/login");
+      router.refresh();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Could not create the account.",

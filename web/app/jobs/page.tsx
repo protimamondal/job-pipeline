@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import BackendHealth from "../components/BackendHealth";
+import SignOut from "../components/SignOut";
 import { requireToken } from "../lib/auth";
 import { fetchApplications } from "../lib/applicationsApi";
 import { fetchJobs } from "../lib/jobsApi";
@@ -41,9 +42,12 @@ export default async function JobBoardPage() {
 
       <div className="mb-6 flex items-baseline justify-between">
         <h1 className="text-xl font-semibold">Jobs</h1>
-        <Link href="/" className="text-sm text-blue-700 hover:underline">
-          ← My pipeline
-        </Link>
+        <div className="flex items-baseline gap-4">
+          <Link href="/" className="text-sm text-blue-700 hover:underline">
+            ← My pipeline
+          </Link>
+          <SignOut />
+        </div>
       </div>
 
       <p className="mb-4 text-sm text-gray-500">{jobs.length} open roles</p>

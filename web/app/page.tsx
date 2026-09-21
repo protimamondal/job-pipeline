@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import ApplicationControls from "./components/ApplicationControls";
 import BackendHealth from "./components/BackendHealth";
+import SignOut from "./components/SignOut";
 import { requireToken } from "./lib/auth";
 import { fetchApplications } from "./lib/applicationsApi";
 import type {
@@ -47,9 +48,12 @@ export default async function PipelinePage() {
 
       <div className="mb-6 flex items-baseline justify-between">
         <h1 className="text-xl font-semibold">My pipeline</h1>
-        <Link href="/jobs" className="text-sm text-blue-700 hover:underline">
-          Browse jobs →
-        </Link>
+        <div className="flex items-baseline gap-4">
+          <Link href="/jobs" className="text-sm text-blue-700 hover:underline">
+            Browse jobs →
+          </Link>
+          <SignOut />
+        </div>
       </div>
 
       {applications.length === 0 && (
