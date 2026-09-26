@@ -52,7 +52,6 @@ export default function DraftPanel({ id }: { id: string }) {
 
   const { completion, complete, error, setCompletion, isLoading, stop } = useCompletion({
     api: FAKE ? "/api/draft/fake" : "/api/draft",
-    streamProtocol: "text",
     body: { id },
   });
   const parsedDraft = parseDraftStream(completion);
