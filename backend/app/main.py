@@ -6,14 +6,14 @@ from uuid import uuid4
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.logging_config import configure_logging
 from app.settings import get_settings
-from app.routers import jobs, auth, applications
+from app.routers import jobs, auth, applications, drafts
+from dotenv import load_dotenv
+load_dotenv()
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s %(name)s %(message)s",
-)
+configure_logging()
 
 logger = logging.getLogger("job_pipeline")
 
@@ -28,6 +28,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(jobs.router)
 app.include_router(auth.router)
 app.include_router(applications.router)
+app.include_router(drafts.router)
 
 settings = get_settings()
 

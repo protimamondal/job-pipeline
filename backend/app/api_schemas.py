@@ -56,3 +56,6 @@ class ApplicationRead(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+
+class DraftRequest(BaseModel):
+    instruction: str | None = None

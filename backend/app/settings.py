@@ -13,10 +13,13 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    openai_api_key: str
+    draft_model: str = "gpt-4.1-mini"
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="JOB_PIPELINE_",
+        extra="ignore",
     )
 
 
