@@ -176,14 +176,50 @@ Redis, which is where a deny-list would live.
 
 ### 3 — Draft streaming and Langfuse
 
-**Status:** Not started
+**Status:** Complete
 
 **Build:** Move cover-letter generation to FastAPI, define the SSE event
 contract, handle cancellation and partial failures, record the prompt, and add
 the first Langfuse trace.
 
+**Implementation checklist:**
+
+- [x] Fix structured request logging (fields were silently dropped from the
+      configured format string).
+- [x] Add the `openai` dependency and `openai_api_key`/`draft_model` settings.
+- [x] Design the streaming contract: initially a custom `delta`/`error`/`done`
+      shape, later replaced with the AI SDK's own real Data Stream / UI
+      Message Stream Protocol (`text-start`/`text-delta`/`text-end`/`error`,
+      the `x-vercel-ai-ui-message-stream` header, the `[DONE]` terminator) —
+      see `PHASE3-SUBPHASE3-CONTRACT.md` for the full contract and why it
+      changed.
+- [x] Add `POST /jobs/{job_id}/draft`: fetch the job, build the prompt, stream
+      the response, and close the upstream OpenAI connection deterministically
+      (`async with`) on completion, disconnect, or error.
+- [x] Turn `web/app/api/draft/route.ts` into a thin auth-and-pipe proxy to the
+      FastAPI endpoint.
+- [x] Drop `DraftPanel.tsx`'s `streamProtocol: "text"` override so
+      `useCompletion`'s default data-protocol parsing handles the stream
+      natively, removing the old `parseDraftStream`/`STREAM_ERROR_MARKER`
+      hack entirely.
+- [x] Add Langfuse tracing via its wrapped OpenAI client (`langfuse.openai`),
+      with `extra="ignore"` on `Settings` so its own unprefixed env vars can
+      share `.env` without crashing the app.
+- [x] Verify end-to-end: real login, a real request through the Next.js proxy
+      into FastAPI, a real OpenAI call, all response frames validated against
+      the AI SDK's actual schema, and a real trace confirmed via the Langfuse
+      API.
+- [x] Run the complete acceptance check and mark this sub-phase complete.
+
 **Acceptance:** The existing draft UI streams through FastAPI, and one complete
 run is visible in Langfuse.
+
+**Carried-forward work:** No automated test covers `POST /jobs/{job_id}/draft`
+yet — verification so far is live/manual only. `backend/.env.example` doesn't
+document the required `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` vars (they
+intentionally sit outside the `JOB_PIPELINE_` prefix convention, since
+Langfuse's own client reads them directly). Resolve both before sub-phase 4
+adds more tool-call complexity on top of this same streaming foundation.
 
 ### 4 — Copilot and tools
 
@@ -191,6 +227,34 @@ run is visible in Langfuse.
 
 **Build:** Move chat/tool orchestration to FastAPI, connect the MCP server, add
 one real external-service integration, and trace tool calls.
+
+**Implementation checklist (starting plan — expect this to evolve once work
+begins, the same way sub-phase 3's did):**
+
+- [ ] Add a Python MCP client dependency and connect it to the existing
+      `mcp-server/` (same server, new client language) and an
+      `mcp_server_url` FastAPI setting mirroring today's Next.js env var.
+- [ ] Add `POST /chat`, protected by the existing auth dependency, accepting
+      the same message-history shape the frontend already sends.
+- [ ] Implement the real AI SDK protocol properly this time, extending
+      sub-phase 3's text-part foundation with tool parts (`tool-input-start`,
+      `tool-input-available`, `tool-output-available`, `start-step`/
+      `finish-step`) so `useChat` keeps working unmodified — same base
+      contract as the draft endpoint, more part types on top.
+- [ ] Reuse the cancellation pattern (`request.is_disconnected()` +
+      `async with`) for the chat stream.
+- [ ] Trace tool calls through Langfuse — a single trace will likely contain
+      multiple nested generations/tool calls here, unlike draft's one-call
+      case.
+- [ ] Turn `web/app/api/chat/route.ts` into a thin proxy to FastAPI, matching
+      the `/api/draft` pattern.
+- [ ] Add one real external-service integration to the MCP tool, replacing or
+      augmenting the current fixed sample-data search (closes the
+      known-limitation noted in the root `README.md`).
+- [ ] Add endpoint tests and confirm the copilot UI still renders every tool-
+      call state (preparing/searching/result/cancelled/error) correctly
+      end to end.
+- [ ] Run the complete acceptance check and mark this sub-phase complete.
 
 **Acceptance:** The existing copilot UI works through FastAPI and renders a real
 tool result.
