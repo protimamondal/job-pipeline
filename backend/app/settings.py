@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     openai_api_key: str
     draft_model: str = "gpt-4.1-mini"
+    mcp_server_url: str = "http://127.0.0.1:8001/mcp"
 
     model_config = SettingsConfigDict(
         env_file=".env",

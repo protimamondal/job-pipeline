@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.logging_config import configure_logging
 from app.settings import get_settings
-from app.routers import jobs, auth, applications, drafts
+from app.routers import jobs, auth, applications, drafts, chat
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -29,6 +29,7 @@ app.include_router(jobs.router)
 app.include_router(auth.router)
 app.include_router(applications.router)
 app.include_router(drafts.router)
+app.include_router(chat.router)
 
 settings = get_settings()
 
