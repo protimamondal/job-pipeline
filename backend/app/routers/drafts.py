@@ -56,7 +56,7 @@ async def event_stream(request: Request, prompt: str):
 
     except Exception as exc:
         yield f'data:{json.dumps({"type":"error","errorText":str(exc)})}\n\n'
-    await get_client().flush()
+    get_client().flush()
     yield "data: [DONE]\n\n"
 
 
