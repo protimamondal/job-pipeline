@@ -1,26 +1,33 @@
 import os
+import httpx
 
 from mcp.server import MCPServer
 
 mcp = MCPServer("jobs server")
 
 @mcp.tool()
-def search_job(title : str,location:str) -> list[dict]:
+async def search_job(title : str,location:str) -> list[dict]:
     "search for job openings by title and location"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "https://www.arbeitnow.com/api/job-board-api",
+            params={"search": title},
+            timeout=10,
+        )
+        response.raise_for_status()
+
+    jobs = response.json()["data"]
+    matches = [j for j in jobs if location.lower() in j["location"].lower()]
 
     return [
         {
-            "company": "Acme Corp",
-            "title": title,
-            "location": location,
-            "salary": 120000,
-        },
-        {
-            "company": "Globex",
-            "title": title,
-            "location": location,
-            "salary": 500,
-        },
+            "company": j["company_name"],
+            "title": j["title"],
+            "location": j["location"],
+            "salary": None,
+        }
+        for j in matches[:5]
     ]
 
 if __name__ == "__main__":
