@@ -1,41 +1,24 @@
-// Placeholder. Task 6 brings the real route over from aisdk-ground-up
-// (createMCPClient + streamText). Empty files are not modules, and the
-
-import { createMCPClient } from "@ai-sdk/mcp";
-import { openai } from "@ai-sdk/openai";
-import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, UIMessage } from "ai";
-
-// build fails on them, so this keeps the route valid until then.
+import { getToken } from "@/app/lib/auth";
+import { backendBaseUrl } from "@/app/lib/backend";
 
 export async function POST(req : Request){
+ const token = await getToken();
+ if(token==null){
+    return new Response("Not authenticated",{status : 401})
+ }
 
-    const {messages} : {messages : UIMessage[]} = await req.json();
-    const mcpServerUrl = process.env.MCP_SERVER_URL ?? "http://127.0.0.1:8001/mcp";
-
-const mcpClient = await createMCPClient({
-    transport : {
-        type : "http",
-        url : mcpServerUrl
-    }
-})
-
-const tools = await mcpClient.tools();
-const result = streamText({
-    model : openai("gpt-4.1-mini"),
-    messages : await convertToModelMessages(messages),
-    tools,
-    stopWhen: stepCountIs(5),
-    onFinish : async ()=>{
-        mcpClient.close()
+ const backendResponse = await fetch(`${backendBaseUrl}/chat`,{
+    method: "POST",
+    headers:{
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
     },
-    onError : async()=>{
-        mcpClient.close()
-    }
-})
+    body: await req.text(),
+    signal: req.signal,
+ })
 
-    return createUIMessageStreamResponse({
-        stream : toUIMessageStream({
-            stream : result.stream,
-        })
-})
+ return new Response(backendResponse.body,{
+    status: backendResponse.status,
+    headers: backendResponse.headers,
+ })
 }
