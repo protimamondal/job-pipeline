@@ -61,4 +61,4 @@ class DraftRequest(BaseModel):
     instruction: str | None = None
 
 class ChatRequest(BaseModel):
-    message: list[dict]
+    messages: list[dict]
