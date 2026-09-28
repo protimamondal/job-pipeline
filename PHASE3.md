@@ -223,41 +223,61 @@ adds more tool-call complexity on top of this same streaming foundation.
 
 ### 4 — Copilot and tools
 
-**Status:** Not started
+**Status:** Complete
 
 **Build:** Move chat/tool orchestration to FastAPI, connect the MCP server, add
 one real external-service integration, and trace tool calls.
 
-**Implementation checklist (starting plan — expect this to evolve once work
-begins, the same way sub-phase 3's did):**
+**Implementation checklist:**
 
-- [ ] Add a Python MCP client dependency and connect it to the existing
-      `mcp-server/` (same server, new client language) and an
-      `mcp_server_url` FastAPI setting mirroring today's Next.js env var.
-- [ ] Add `POST /chat`, protected by the existing auth dependency, accepting
-      the same message-history shape the frontend already sends.
-- [ ] Implement the real AI SDK protocol properly this time, extending
-      sub-phase 3's text-part foundation with tool parts (`tool-input-start`,
-      `tool-input-available`, `tool-output-available`, `start-step`/
-      `finish-step`) so `useChat` keeps working unmodified — same base
-      contract as the draft endpoint, more part types on top.
-- [ ] Reuse the cancellation pattern (`request.is_disconnected()` +
-      `async with`) for the chat stream.
-- [ ] Trace tool calls through Langfuse — a single trace will likely contain
-      multiple nested generations/tool calls here, unlike draft's one-call
-      case.
-- [ ] Turn `web/app/api/chat/route.ts` into a thin proxy to FastAPI, matching
+- [x] Add the `mcp` Python client dependency and an `mcp_server_url` FastAPI
+      setting mirroring the old Next.js env var; prove connectivity by
+      listing and calling the real tool before writing any chat logic.
+- [x] Add `POST /chat`, protected by the existing auth dependency, accepting
+      the same message-history shape the frontend already sends
+      (`to_openai_messages` strips it down to plain `{role, content}` —
+      historical tool-call replay is a known simplification, not fixed).
+- [x] Implement the real AI SDK protocol, extending sub-phase 3's text-part
+      foundation with tool parts (`tool-input-start`/`delta`/`available`,
+      `tool-output-available`/`error`, `start-step`/`finish-step`) so
+      `useChat` needed zero frontend changes.
+- [x] Reuse the cancellation pattern (`request.is_disconnected()` +
+      `async with`) for the chat stream, plus a 5-round cap on the
+      tool-calling loop mirroring the old `stepCountIs(5)`.
+- [x] Trace tool calls through Langfuse: wrapped the whole turn in
+      `start_as_current_observation(as_type="agent")` so multiple OpenAI
+      calls in one turn nest under a single trace — confirmed via the
+      Langfuse API (one `AGENT` + two `GENERATION` observations sharing one
+      `trace_id`).
+- [x] Turn `web/app/api/chat/route.ts` into a thin proxy to FastAPI, matching
       the `/api/draft` pattern.
-- [ ] Add one real external-service integration to the MCP tool, replacing or
-      augmenting the current fixed sample-data search (closes the
-      known-limitation noted in the root `README.md`).
-- [ ] Add endpoint tests and confirm the copilot UI still renders every tool-
-      call state (preparing/searching/result/cancelled/error) correctly
-      end to end.
-- [ ] Run the complete acceptance check and mark this sub-phase complete.
+- [x] Add one real external-service integration to the MCP tool
+      (`mcp-server/server.py`'s `search_job` now calls Arbeitnow's live,
+      no-auth job board API instead of returning fixed sample data; closes
+      the known-limitation noted in the root `README.md`).
+- [x] Add auth-gating tests for `/chat` and `/jobs/{job_id}/draft`
+      (`tests/test_chat.py`, `tests/test_drafts.py`); confirm the copilot UI
+      renders every tool-call state end to end with real data.
+- [x] Run the complete acceptance check and mark this sub-phase complete.
 
 **Acceptance:** The existing copilot UI works through FastAPI and renders a real
 tool result.
+
+**A real bug found along the way, fixed in both `drafts.py` and `chat.py`:**
+`await get_client().flush()` — `flush()` is synchronous, not a coroutine;
+awaiting it raised `TypeError` and silently killed the stream right before
+`[DONE]`. Also found and fixed: `tool-output-available` was sending the raw
+MCP text blocks instead of `result.structured_content`, which would have
+crashed `CoPilotPanel.tsx`'s existing rendering code at `.structuredContent.result`.
+
+**Carried-forward work:** The two new tests only confirm auth-gating (401
+without a token) — they don't exercise the actual streaming/tool-calling
+behavior, which would need `AsyncOpenAI` and the MCP `ClientSession` mocked
+to test without hitting real, paid, non-deterministic external services.
+Worth doing together with the same gap already noted for `drafts.py` in
+sub-phase 3, since both need similar mocking work. `search_job`'s real
+integration has no error handling yet for the external API being down or
+rate-limited — untested, not just unhandled.
 
 ### 5 — Redis and operational controls
 
