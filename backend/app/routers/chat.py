@@ -28,6 +28,13 @@ def to_openai_messages(ui_messages: list[dict])-> list[dict]:
     return messages
 
 
+def tool_error_text(result) -> str:
+    """Pull the readable message out of a failed tool result."""
+    parts = [getattr(block, "text", "") for block in result.content or []]
+    text = " ".join(part for part in parts if part).strip()
+    return text or "The tool failed without a message."
+
+
 async def get_openai_tools(session: ClientSession) -> list[dict]:
     tools = await session.list_tools()
     return [
@@ -138,6 +145,8 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
                             })
                             try:
                                 result = await session.call_tool(entry["name"], args)
+                                if result.is_error:
+                                    raise RuntimeError(tool_error_text(result))
                                 output = {"structuredContent": result.structured_content}
                                 yield event({
                                     "type": "tool-output-available",
