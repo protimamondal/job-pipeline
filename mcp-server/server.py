@@ -1,9 +1,15 @@
 import json
+import logging
 import os
 import httpx
 import redis.asyncio as redis
 
 from mcp.server import MCPServer
+
+from logging_config import configure_logging
+
+configure_logging()
+logger = logging.getLogger("job_pipeline")
 
 mcp = MCPServer("jobs server")
 
@@ -24,12 +30,15 @@ async def search_job(title : str,location:str) -> list[dict]:
     try:
         cached = await redis_client.get(cache_key)
     except Exception as exc:
-        print(f"redis read failed, continuing without cache: {exc}")
+        logger.warning(
+            "cache_read_failed",
+            extra={"cache_key": cache_key, "error": repr(exc)},
+        )
     if cached is not None:
-        print(f"cache hit {cache_key}")
+        logger.info("cache_lookup", extra={"cache": "hit", "cache_key": cache_key})
         return json.loads(cached)
 
-    print(f"cache miss {cache_key}")
+    logger.info("cache_lookup", extra={"cache": "miss", "cache_key": cache_key})
 
     try:
         async with httpx.AsyncClient() as client:
@@ -41,12 +50,18 @@ async def search_job(title : str,location:str) -> list[dict]:
             response.raise_for_status()
         jobs = response.json()["data"]
     except httpx.HTTPError as exc:
-        print(f"arbeitnow request failed: {exc!r}")
+        logger.error(
+            "arbeitnow_request_failed",
+            extra={"title": title, "location": location, "error": repr(exc)},
+        )
         raise RuntimeError(
             "Job search is temporarily unavailable. Please try again in a moment."
         ) from exc
     except (KeyError, ValueError) as exc:
-        print(f"arbeitnow returned unexpected data: {exc!r}")
+        logger.error(
+            "arbeitnow_unexpected_response",
+            extra={"title": title, "location": location, "error": repr(exc)},
+        )
         raise RuntimeError(
             "Job search returned an unexpected response. Please try again in a moment."
         ) from exc
@@ -65,7 +80,10 @@ async def search_job(title : str,location:str) -> list[dict]:
     try:
         await redis_client.set(cache_key, json.dumps(results), ex=CACHE_TTL_SECONDS)
     except Exception as exc:
-        print(f"redis write failed, result not cached: {exc}") 
+        logger.warning(
+            "cache_write_failed",
+            extra={"cache_key": cache_key, "error": repr(exc)},
+        )
     return results
 
 if __name__ == "__main__":

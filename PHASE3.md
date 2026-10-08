@@ -281,13 +281,115 @@ rate-limited — untested, not just unhandled.
 
 ### 5 — Redis and operational controls
 
-**Status:** Not started
+**Status:** Complete, with the queued background job deliberately dropped (see
+**Scope decision** below)
 
 **Build:** Add one justified cache, a basic per-user rate limit, and one queued
 background job with observable status and retries.
 
+**Implementation checklist:**
+
+- [x] Run Redis as a container on port 6380 (6379 was already taken by another
+      project's Redis locally, the same reason Postgres runs on 5433 here) and
+      add the `redis` Python client. `redis` is the counterpart of `asyncpg`,
+      not of SQLAlchemy — Redis has one flat keyspace, so there is no ORM,
+      no models and no migrations.
+- [x] Cache `search_job` in `mcp-server/server.py` with a cache-aside read,
+      a `jobs:{title}:{location}` key, and a 600-second TTL. Ten minutes is a
+      staleness decision, not a performance one: job listings change slowly,
+      and a candidate seeing a ten-minute-old board is harmless.
+- [x] Prove hit/miss behaviour: a cold call takes ~0.6s and logs
+      `cache_lookup cache=miss`; the next call takes ~0.001s and logs
+      `cache_lookup cache=hit`.
+- [x] Degrade gracefully when Redis is unreachable — every Redis call is
+      wrapped, failures are logged, and the search still returns live results.
+      Losing Redis may only make things slower, never wrong.
+- [x] Fix the 4s-per-call stall when Redis is down with
+      `socket_connect_timeout=0.5`. Measured: 4.1s default, 0.509s with the
+      timeout. Disabling client retries made no difference — the delay was the
+      OS-level connect timeout, not retries.
+- [x] Handle the Arbeitnow API failing, which sub-phase 4 left as a known gap:
+      `httpx.HTTPError` (connect, timeout, bad status) and `KeyError`/
+      `ValueError` (unexpected shape) each map to a clean user-facing message,
+      with `raise ... from exc` preserving the cause for the logs. Verified
+      across all four modes, and verified that no failure is ever cached.
+- [x] Add a per-user rate limit of 20 requests per minute on the two endpoints
+      that call the LLM (`POST /chat`, `POST /jobs/{job_id}/draft`), as a
+      fixed window: `INCR` on `ratelimit:{user_id}:{window}` with the window
+      number baked into the key, so expiry needs no cleanup pass.
+- [x] Implement it as a FastAPI dependency rather than middleware. Middleware
+      runs before dependency resolution, so it has no authenticated user to
+      key the limit on. `enforce_rate_limit` depends on `get_current_user` and
+      returns the same `User`, leaving `cur_user` unchanged at both call sites.
+- [x] Fail open when Redis is unreachable: allow the request, log at ERROR.
+      Both endpoints are already behind authentication, so an unauthenticated
+      flood is not the threat being defended against.
+- [x] Verify over real HTTP with a real logged-in user: counter at the limit
+      returns `429` with `Retry-After: 60`, a fresh counter reaches the
+      endpoint, and both endpoints are wired.
+- [x] Replace the `print()` calls in `mcp-server/server.py` with the same
+      `JsonFormatter` the backend uses, so the MCP server's cache hits/misses
+      (INFO), Redis failures (WARNING) and Arbeitnow failures (ERROR) are
+      structured and greppable in a hosted log stream.
+- [ ] One queued background job with observable status and retries —
+      **dropped deliberately**, see below.
+
 **Acceptance:** Cache hit/miss behavior is provable, excess calls return `429`,
-and the worker completes or retries a task as designed.
+and the worker completes or retries a task as designed. The first two pass; the
+third does not apply after the scope decision below.
+
+**Scope decision — no queue (2026-10-09):** Protima and Rahul decided against
+building the worker. Nothing in this product is heavy enough to need one: the
+two slow operations are LLM streams that the user is actively watching, and
+moving those to a worker would replace streaming with short-polling, which is a
+straight UX downgrade on the most visible feature in the app. `arq` was the
+library chosen if it had gone ahead, over Celery and RQ, because the backend is
+fully async and a sync worker would have to wrap every existing call in
+`asyncio.run`. Queueing was studied and prototyped on paper only.
+
+**What this costs us, recorded honestly:** when Arbeitnow returns `429`, the
+search still fails permanently for that user — there is nothing to retry it
+later. This was logged as a known limitation in sub-phase 4 and the queue was
+the intended fix. It remains open.
+
+**Decisions worth remembering:**
+
+- Fixed window over sliding window. A fixed window allows up to 2x the limit
+  across a minute boundary; a sliding window (a sorted set of request
+  timestamps, trim-count-add) does not, but its three commands are not atomic
+  and would need a Lua script to be correct. `INCR` is a single command and
+  cannot be raced. The burst was judged acceptable for 20/min on an
+  authenticated endpoint.
+- Task status, had the queue been built, would have lived in a Postgres
+  `tasks` table rather than Redis, to keep Redis disposable.
+
+**Carried-forward work:**
+
+- No automated tests for the cache or the rate limiter — both were verified
+  with throwaway scripts that were then deleted. This compounds the gap
+  already recorded in sub-phases 3 and 4, where the tests only prove
+  auth-gating and never exercise streaming or tool-calling.
+- A blocked request still increments the fixed-window counter, so a hammering
+  client inflates its own count. Harmless here, but it is why `INCR` cannot
+  implement a sliding window.
+- If `EXPIRE` fails on its own after a successful `INCR`, that key never
+  expires — one leaked key per user per minute, in a case that needs Redis to
+  accept one command and reject the next.
+- **mcp version drift:** `backend` has mcp 2.2.0, `mcp-server` has 2.0.0. The
+  newer version strips the exception text out of tool errors, so the friendly
+  Arbeitnow messages added here would be replaced by a generic
+  `Error executing tool search_job` if the backend's version were ever matched
+  in the MCP server. Verified empirically, not yet resolved.
+- `render.yaml` has no Redis service and no `REDIS_URL`; the MCP server there
+  will run cache-less until sub-phase 6 adds one.
+
+**Latent bug found along the way, fixed in `backend/app/routers/chat.py`:**
+`ClientSession.call_tool` does not raise when a tool fails — it returns a
+`CallToolResult` with `is_error=True` and `structured_content=None`. The
+existing `except Exception` handler therefore never fired, and a failed tool
+was reported to the browser as a success with a null payload, which would crash
+`CoPilotPanel.tsx` at `.structuredContent.result`. Now the result's error text
+is raised so the existing handler sees it.
 
 ### 6 — Production release
 
