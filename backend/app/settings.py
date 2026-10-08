@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     openai_api_key: str
     draft_model: str = "gpt-4.1-mini"
     mcp_server_url: str = "http://127.0.0.1:8001/mcp"
+    redis_url: str = "redis://localhost:6380"
 
     model_config = SettingsConfigDict(
         env_file=".env",

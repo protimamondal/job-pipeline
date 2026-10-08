@@ -13,6 +13,7 @@ from app.db_models import Job, User
 from app.dependencies import get_current_user
 from app.profile import PROFILE
 from app.settings import get_settings
+from app.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/jobs", tags=["drafts"])
 
@@ -65,7 +66,7 @@ async def create_draft(
     job_id: int,
     payload: DraftRequest,
     request: Request,
-    cur_user: User = Depends(get_current_user),
+    cur_user: User = Depends(enforce_rate_limit),
     session : AsyncSession = Depends(get_session),
 )-> StreamingResponse:
     job = await session.get(Job,job_id)

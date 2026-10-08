@@ -12,6 +12,7 @@ from app.api_schemas import ChatRequest
 from app.db_models import User
 from app.dependencies import get_current_user
 from app.settings import get_settings
+from app.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/chat",tags=["chat"])
 
@@ -188,7 +189,7 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
 async def create_chat(
     payload: ChatRequest,
     request: Request,
-    cur_user: User = Depends(get_current_user),
+    cur_user: User = Depends(enforce_rate_limit),
 ) -> StreamingResponse:
     return StreamingResponse(
         chat_stream(request, payload.messages),
