@@ -3,7 +3,19 @@ from collections.abc import AsyncGenerator
 
 from app.settings import get_settings
 
-engine = create_async_engine(get_settings().database_url, echo=True)
+settings = get_settings()
+
+# echo only outside production: it logs every statement with its bound
+# parameters, which in production means user emails and hashed passwords in
+# the log stream, plus a lot of noise around each request.
+engine = create_async_engine(
+    settings.database_url,
+    echo=settings.environment == "local",
+    # Render's free Postgres allows few connections and recycles idle ones;
+    # pre_ping replaces a connection the server has already closed instead of
+    # failing the request with it.
+    pool_pre_ping=True,
+)
 
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 

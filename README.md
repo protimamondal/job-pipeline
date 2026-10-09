@@ -83,8 +83,17 @@ workflow.
 
 ## Run it locally
 
-Requires Node.js 22+, Python 3.13+, [uv](https://docs.astral.sh/uv/), and an
-OpenAI API key.
+Requires Node.js 22+, Python 3.13+, [uv](https://docs.astral.sh/uv/), Docker,
+and an OpenAI API key.
+
+Postgres and Redis both run as containers. The ports are deliberately not the
+defaults: another project on the development machine already holds 5432 and
+6379.
+
+```bash
+docker run -d --name job-pipeline-pg -p 5433:5432   -e POSTGRES_USER=job_pipeline -e POSTGRES_PASSWORD=devpassword   -e POSTGRES_DB=job_pipeline postgres:17
+docker run -d --name job-pipeline-redis -p 6380:6379 redis:7-alpine
+```
 
 Terminal 1 — the MCP server:
 
@@ -94,41 +103,96 @@ uv sync --frozen
 uv run python server.py     # http://127.0.0.1:8001/mcp
 ```
 
-Terminal 2 — the frontend:
+Terminal 2 — the FastAPI backend:
+
+```bash
+cd backend
+cp .env.example .env        # then fill in the two CHANGE_ME values
+uv sync --frozen
+uv run alembic upgrade head
+uv run python seed.py
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+Terminal 3 — the frontend:
 
 ```bash
 cd web
 nvm use
-printf 'OPENAI_API_KEY=sk-your-key\n' > .env.local
 npm ci
 npm run dev                 # http://localhost:3000
 ```
 
-`MCP_SERVER_URL` defaults to the local server, so nothing else is needed.
+The frontend needs no environment file locally: `NEXT_PUBLIC_BACKEND_URL`
+defaults to `http://127.0.0.1:8000`. It holds no API keys at all any more —
+every AI call is proxied to FastAPI, which is where the OpenAI key lives.
+
+Redis is optional: without it, searches go to the job board every time and
+nothing is rate limited, which is logged but not fatal.
+
+### Tests
+
+```bash
+cd backend && uv run pytest        # 73 tests, no containers needed
+cd mcp-server && uv run pytest     # 20 tests
+```
+
+The backend suite needs the Postgres container, because it runs against a
+real `job_pipeline_test` database. Redis is faked, so no container is needed
+for it.
 
 ## Deploy
 
-**MCP server → Render.** Create a Blueprint from this repository. The
-`render.yaml` at the repository root builds `mcp-server/` as a Docker service.
-
-**Frontend → Vercel.** Import this repository and set the project **Root
-Directory** to `web`. Add two Production environment variables:
+**Backend, MCP server, Postgres and Redis → Render.** Create a Blueprint from
+this repository; `render.yaml` defines all four. Secrets are marked
+`sync: false`, so Render prompts for them on the first deploy rather than
+keeping them in git:
 
 | Variable | Value |
 |---|---|
-| `OPENAI_API_KEY` | your OpenAI key |
-| `MCP_SERVER_URL` | `https://<render-service>.onrender.com/mcp` |
+| `JOB_PIPELINE_JWT_SECRET` | a long random string |
+| `JOB_PIPELINE_OPENAI_API_KEY` | your OpenAI key |
+| `JOB_PIPELINE_CORS_ORIGINS` | the Vercel URL, e.g. `["https://job-pipeline.vercel.app"]` |
+| `JOB_PIPELINE_MCP_SERVER_URL` | `https://job-pipeline-mcp.onrender.com/mcp` |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` | from the Langfuse project |
+
+The database URL and the Redis URL are wired by the blueprint itself. Render
+hands out a `postgresql://` connection string, which `Settings` rewrites to
+the asyncpg driver — there is nothing to keep in sync by hand.
+
+Migrations run from the container's start command (`alembic upgrade head`)
+rather than a Render pre-deploy command, which needs a paid instance type.
+That is safe for a single instance; more than one would need the pre-deploy
+step so two containers cannot migrate at once.
+
+**Frontend → Vercel.** Import this repository and set the project **Root
+Directory** to `web`. One Production environment variable:
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_BACKEND_URL` | `https://job-pipeline-api.onrender.com` |
 
 Then check both surfaces on the live URL: a cover letter that streams, and a
 copilot job search that shows the tool running.
+
+On Render's free plan: the services sleep when idle, so the first request
+after a pause is slow; Postgres expires after 30 days; and Redis has no
+persistence, so a restart empties the search cache and the rate-limit
+counters. None of that loses data, because Postgres is the only source of
+truth.
 
 ## Known limitations
 
 Kept deliberately, and listed rather than hidden:
 
-- The MCP endpoint is unauthenticated. That is only acceptable because the tool
-  returns fixed sample data. Anything touching real user data needs auth in
-  front of it first.
+- The MCP endpoint is unauthenticated. That is only acceptable because it
+  returns public job listings from a third-party API and holds no user data.
+  Anything touching real user data needs auth in front of it first.
+- There is no background worker, so a rate-limited job board is not retried:
+  the search just fails for that user. Deliberate — see sub-phase 5 in
+  `PHASE3.md`.
+- The rate limiter uses a fixed window, which allows up to twice the limit
+  across a minute boundary.
 - Copy and Edit still carry the converted citation link syntax.
 - A citation marker can flash raw while only part of it has streamed.
 - An unrecognised citation marker is not dropped yet.
