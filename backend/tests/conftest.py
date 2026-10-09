@@ -8,11 +8,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app import rate_limit
 from app.db import get_session
 from app.db_models import Base, Job
 from app.main import app
 from app.settings import get_settings
 from seed_data import JOBS
+from tests.fakes import FakeRedis
 
 # Same server, same credentials — a different database.
 TEST_DATABASE_URL = get_settings().database_url.rsplit("/", 1)[0] + "/job_pipeline_test"
@@ -81,3 +83,61 @@ def register_user(client: TestClient):
 def auth_headers(register_user) -> dict[str, str]:
     """The Authorization header for one logged-in user."""
     return register_user()
+
+
+@pytest.fixture(autouse=True)
+def fake_redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
+    """Give every test its own empty Redis.
+
+    Autouse because the rate limiter sits in front of `/chat` and
+    `/jobs/{job_id}/draft`: without this, those tests would share one counter
+    with each other and with whatever is in the real Redis. See `FakeRedis`
+    for why the real container is not used here.
+    """
+    fake = FakeRedis()
+    monkeypatch.setattr(rate_limit, "redis_client", fake)
+    return fake
+
+
+@pytest.fixture
+def stub_chat_ai(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make `/chat` answer instantly without calling OpenAI or the MCP server.
+
+    For tests that care about something other than the stream itself -- rate
+    limiting, auth -- where any valid answer will do. A fresh FakeOpenAI per
+    request, because the route builds a new client each time and a test may
+    send many requests.
+    """
+    from app.routers import chat as chat_router
+    from tests.fakes import (
+        FakeHttpClient,
+        FakeLangfuse,
+        FakeOpenAI,
+        FakeSession,
+        text_chunk,
+    )
+
+    monkeypatch.setattr(
+        chat_router,
+        "AsyncOpenAI",
+        lambda **kw: FakeOpenAI([[text_chunk("ok", finish_reason="stop")]]),
+    )
+    monkeypatch.setattr(chat_router, "streamable_http_client", FakeHttpClient)
+    monkeypatch.setattr(
+        chat_router, "ClientSession", lambda read, write: FakeSession()
+    )
+    monkeypatch.setattr(chat_router, "get_client", lambda: FakeLangfuse())
+
+
+@pytest.fixture
+def stub_draft_ai(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make `/jobs/{job_id}/draft` answer instantly without calling OpenAI."""
+    from app.routers import drafts as drafts_router
+    from tests.fakes import FakeLangfuse, FakeOpenAI, text_chunk
+
+    monkeypatch.setattr(
+        drafts_router,
+        "AsyncOpenAI",
+        lambda **kw: FakeOpenAI([[text_chunk("Dear hiring manager,")]]),
+    )
+    monkeypatch.setattr(drafts_router, "get_client", lambda: FakeLangfuse())
