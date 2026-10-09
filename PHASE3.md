@@ -393,14 +393,82 @@ is raised so the existing handler sees it.
 
 ### 6 — Production release
 
-**Status:** Not started
+**Status:** In progress — everything that can be done from the repository is
+done; the remaining items need the Render, Vercel and Langfuse dashboards
 
 **Build:** Add integration tests, safe deploy-time migrations, hosted FastAPI,
 Postgres, and Redis, update the Vercel environment, and verify live logs and
 traces.
 
+**Implementation checklist:**
+
+- [x] Integration tests, closing the gap carried forward from sub-phases 3, 4
+      and 5 where the only tests for the AI routes asserted a 401. 93 tests
+      across both projects: the AI SDK event protocol, the tool-calling loop,
+      two parallel tool calls, the five-round cap, the draft prompt, each
+      Arbeitnow failure mode, cache hit/miss and TTL, and the rate limiter's
+      policy, window and fail-open behaviour.
+- [x] `tests/fakes.py` replaces OpenAI, the MCP server and Langfuse, so the
+      suite costs nothing to run and is deterministic. `FakeRedis` rather than
+      the container, because `app.cache.redis_client` is created once at
+      import and `TestClient` runs each request on a fresh event loop — a
+      pooled connection ends up owned by a closed loop. Under uvicorn there is
+      one loop per process, so this is a test artefact, not a production bug.
+- [x] A regression test for the sub-phase 5 bug where a failed MCP tool was
+      reported to the browser as a success with a null payload.
+- [x] A `Dockerfile` for the backend, and `render.yaml` extended from one
+      service to four: the FastAPI backend, the MCP server, Postgres, and one
+      Key Value instance shared by both web services.
+- [x] Safe deploy-time migrations: `alembic upgrade head` in the container's
+      start command. Not a Render `preDeployCommand`, which needs a paid
+      instance type. Idempotent, so restarts are safe — but see the limitation
+      below about more than one instance.
+- [x] Fix three things that would only have failed in production:
+      `postgresql://` not naming the asyncpg driver (the service would not
+      have booted), `echo=True` logging every statement with its bound
+      parameters (user emails and password hashes in the log stream), and no
+      `pool_pre_ping` against a Postgres that recycles idle connections.
+- [x] Verify the image for real: built it, ran it against the local containers
+      with a deliberately plain `postgresql://` URL the way Render supplies
+      one, and confirmed migrations applied, `/health` returned 200 with
+      `environment=production`, register/login/`/auth/me`/`/jobs` all worked,
+      and no SQL appeared in the logs.
+- [x] Correct the documentation rather than add to it. The README's local
+      setup had no backend, Postgres or Redis, and still told the reader to
+      put an OpenAI key in the frontend — the frontend has held no keys since
+      sub-phase 4 moved every AI call behind FastAPI.
+- [ ] Create the Render Blueprint and supply the prompted secrets (needs the
+      Render dashboard).
+- [ ] Set `NEXT_PUBLIC_BACKEND_URL` on Vercel to the live backend (needs the
+      Vercel dashboard).
+- [ ] Set `JOB_PIPELINE_CORS_ORIGINS` to the Vercel origin once it is known.
+      Until this is right the browser will be refused by CORS even though the
+      backend is healthy — the most likely first failure.
+- [ ] Create a Langfuse production project and set its three variables, then
+      confirm a live trace arrives.
+- [ ] Run the acceptance check against the live URLs and mark this sub-phase
+      complete.
+
 **Acceptance:** The public frontend uses the live FastAPI backend; auth,
 persistence, both AI surfaces, tools, and traces are verified end to end.
+
+**Free-plan consequences, accepted:** services sleep when idle, so the first
+request after a pause is slow and may look broken; Render's free Postgres
+expires after 30 days; the Key Value instance has no persistence, so a restart
+empties the search cache and the rate-limit counters. None of that loses data,
+because Postgres is the only source of truth — which is the property
+sub-phase 5 was built around.
+
+**Carried-forward work:**
+
+- Migrating from the start command only holds for a single instance. Two
+  containers starting together would both run `alembic upgrade head` at once;
+  that needs a `preDeployCommand`, and so a paid instance type.
+- No CI. The tests exist and need no containers except Postgres, so wiring
+  them to run on push is the obvious next step and is not done.
+- The mcp version drift from sub-phase 5 is still unresolved (`backend` 2.2.0,
+  `mcp-server` 2.0.0), and 2.2.0 strips the exception text that carries the
+  friendly Arbeitnow messages.
 
 ## Guardrails
 
