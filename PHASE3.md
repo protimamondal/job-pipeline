@@ -437,8 +437,21 @@ traces.
       setup had no backend, Postgres or Redis, and still told the reader to
       put an OpenAI key in the frontend — the frontend has held no keys since
       sub-phase 4 moved every AI call behind FastAPI.
-- [ ] Create the Render Blueprint and supply the prompted secrets (needs the
-      Render dashboard).
+- [x] Create the Render Blueprint and supply the prompted secrets. The first
+      deploy failed because every `sync: false` variable was absent rather
+      than blank: Render only prompts for them while the Blueprint is being
+      created, and nothing is stored if that is skipped, so `Settings` raised
+      `jwt_secret Field required` inside `alembic/env.py` before uvicorn
+      started. Added `JOB_PIPELINE_JWT_SECRET`, `JOB_PIPELINE_OPENAI_API_KEY`
+      and `JOB_PIPELINE_MCP_SERVER_URL` from the service's Environment page.
+- [x] Verify the live backend. `/health` returns 200 with
+      `environment=production`; register 201, duplicate register 409, login
+      200 with a bearer token, `/auth/me` 200, `/jobs` 200, and `/auth/me`
+      without a token and login with a wrong password both 401 — so the image,
+      the migrations, Postgres and JWT signing are all correct in production.
+      The MCP service answers an `initialize` handshake over
+      `POST /mcp` and lists its one tool, `search_job`. It has no `/health`
+      route, by design, so a 404 there is not a fault.
 - [ ] Set `NEXT_PUBLIC_BACKEND_URL` on Vercel to the live backend (needs the
       Vercel dashboard).
 - [ ] Set `JOB_PIPELINE_CORS_ORIGINS` to the Vercel origin once it is known.
@@ -447,7 +460,25 @@ traces.
 - [ ] Create a Langfuse production project and set its three variables, then
       confirm a live trace arrives.
 - [ ] Run the acceptance check against the live URLs and mark this sub-phase
-      complete.
+      complete. Blocked on the two items below, neither of which is a code or
+      deployment fault.
+
+**Blocked, not broken:**
+
+- The OpenAI account has no credits. Both AI surfaces fail with
+  `RateLimitError: 429 ... credit_balance_exhausted`, and it reproduces
+  locally with the same key, so it is an account-level billing state rather
+  than anything about the deployment. The browser sees it as one `error`
+  event, because `streamable_http_client` runs inside an anyio task group
+  whose `__aexit__` rewraps the real exception as `unhandled errors in a
+  TaskGroup (1 sub-exception)`. Worth noting as a diagnosability problem: the
+  error that reaches the log says nothing about what actually failed.
+- The production `jobs` table is empty, so `/jobs` returns `[]` and no draft
+  can be requested. `/jobs` is read-only by design, and `seed.py` has to run
+  inside the container, which the free plan gives no shell for. The way in is
+  to run it from a laptop against the database's *external* connection string
+  — but note it begins with `TRUNCATE TABLE jobs, applications`, which is
+  only safe while production holds nothing worth keeping.
 
 **Acceptance:** The public frontend uses the live FastAPI backend; auth,
 persistence, both AI surfaces, tools, and traces are verified end to end.
