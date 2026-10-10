@@ -473,12 +473,16 @@ traces.
   whose `__aexit__` rewraps the real exception as `unhandled errors in a
   TaskGroup (1 sub-exception)`. Worth noting as a diagnosability problem: the
   error that reaches the log says nothing about what actually failed.
-- The production `jobs` table is empty, so `/jobs` returns `[]` and no draft
-  can be requested. `/jobs` is read-only by design, and `seed.py` has to run
-  inside the container, which the free plan gives no shell for. The way in is
-  to run it from a laptop against the database's *external* connection string
-  — but note it begins with `TRUNCATE TABLE jobs, applications`, which is
-  only safe while production holds nothing worth keeping.
+- ~~The production `jobs` table is empty~~ — fixed by `seed_if_empty.py`,
+  which the container runs straight after the migrations. The jobs list is
+  browse-only by design, so nothing in the product can populate a new
+  database, and the free plan gives no shell to run `seed.py` by hand. Seeding
+  at boot means a new database is never served empty, and it self-heals when
+  Render's free Postgres expires after 30 days and is replaced. It inserts
+  only into an empty table and deletes nothing — unlike `seed.py`, whose
+  `TRUNCATE` makes it unsafe to point at production. Verified on the real
+  image against a fresh database: the migrations ran, 7 jobs were inserted,
+  and a restart logged `seed_skipped` and left the count at 7.
 
 **Acceptance:** The public frontend uses the live FastAPI backend; auth,
 persistence, both AI surfaces, tools, and traces are verified end to end.
