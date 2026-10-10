@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     openai_api_key: str
     draft_model: str = "gpt-4.1-mini"
     mcp_server_url: str = "http://127.0.0.1:8001/mcp"
+    # The MCP SDK's own default is 30s, and a sleeping free-plan service takes
+    # a little over 31s to wake, so the first request after an idle period
+    # failed about a second early. Long enough to cover a cold start, and
+    # still short enough that a genuinely dead service does not hang the user.
+    mcp_timeout_seconds: float = 90.0
     redis_url: str = "redis://localhost:6380"
 
     model_config = SettingsConfigDict(

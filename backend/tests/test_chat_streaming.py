@@ -342,7 +342,7 @@ def test_an_mcp_server_that_is_down_streams_one_error_event(
     """
     install_fakes(monkeypatch, turns=[[text_chunk("unused", finish_reason="stop")]])
 
-    def refuse(url):
+    def refuse(url, *, http_client=None):
         raise ConnectionError("All connection attempts failed")
 
     monkeypatch.setattr(chat_router, "streamable_http_client", refuse)

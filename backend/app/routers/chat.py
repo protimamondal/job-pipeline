@@ -1,6 +1,8 @@
 import json
+import logging
 import uuid
 
+import httpx2
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from langfuse.openai import AsyncOpenAI
@@ -15,6 +17,27 @@ from app.settings import get_settings
 from app.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/chat",tags=["chat"])
+
+logger = logging.getLogger("job_pipeline")
+
+
+def unwrap(exc: BaseException) -> BaseException:
+    """The innermost cause of an exception group.
+
+    anyio task groups -- which `streamable_http_client` runs inside -- re-raise
+    whatever happened within them wrapped in an ExceptionGroup, sometimes
+    nested two deep. Reporting the wrapper gives "unhandled errors in a
+    TaskGroup (1 sub-exception)", which says nothing about what went wrong.
+    """
+    while True:
+        nested = getattr(exc, "exceptions", None)
+        if nested and len(nested) == 1:
+            exc = nested[0]
+        elif exc.__cause__ is not None:
+            exc = exc.__cause__
+        else:
+            return exc
+
 
 def to_openai_messages(ui_messages: list[dict])-> list[dict]:
     messages = []
@@ -62,7 +85,16 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
 
     try:
         with langfuse.start_as_current_observation(name="copilot-chat", as_type="agent"):
-            async with streamable_http_client(settings.mcp_server_url) as (read_stream, write_stream):
+            # The SDK's default 30s general timeout is shorter than a
+            # sleeping free-plan service takes to wake, so pass a client of
+            # our own. The read timeout stays at the SDK's 300s: that one
+            # governs how long a response stream may stay open, not the
+            # connection.
+            async with httpx2.AsyncClient(
+                timeout=httpx2.Timeout(settings.mcp_timeout_seconds, read=300.0)
+            ) as http_client, streamable_http_client(
+                settings.mcp_server_url, http_client=http_client
+            ) as (read_stream, write_stream):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
                     tools = await get_openai_tools(session)
@@ -179,7 +211,13 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
                         messages.extend(tool_result_messages)
 
     except Exception as exc:
-        yield event({"type": "error", "errorText": str(exc)})
+        cause = unwrap(exc)
+        logger.error(
+            "chat_stream_failed",
+            extra={"error_type": type(cause).__name__},
+            exc_info=cause,
+        )
+        yield event({"type": "error", "errorText": str(cause)})
 
     langfuse.flush()
     yield "data: [DONE]\n\n"

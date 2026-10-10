@@ -165,10 +165,15 @@ class FakeSession:
 
 
 class FakeHttpClient:
-    """Replaces `streamable_http_client`, which yields a stream pair."""
+    """Replaces `streamable_http_client`, which yields a stream pair.
 
-    def __init__(self, url: str) -> None:
+    `http_client` is the httpx2 client the router builds so the connection
+    survives a cold start; it is kept so tests can read its timeout.
+    """
+
+    def __init__(self, url: str, *, http_client: object | None = None) -> None:
         self.url = url
+        self.http_client = http_client
 
     async def __aenter__(self) -> tuple[object, object]:
         return (object(), object())

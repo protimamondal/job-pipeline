@@ -482,21 +482,27 @@ traces.
       the job appears on the board, and `POST /api/draft` streams a
       1,665-character cover letter in 4.5s. A signed-out visitor is
       redirected to `/login`.
-- [ ] Fix the cold-start failure below, then mark this sub-phase complete.
-      It is the only thing left.
+- [x] Fix the cold-start failure described below.
+- [ ] Re-run the copilot against a genuinely idle MCP service to confirm the
+      fix in production, then mark this sub-phase complete.
 
-**Found by the live acceptance run — the first chat after an idle period
-fails.** Both free services sleep. When the backend is awake but the MCP
-service is not, the backend's call to it has to wait for a cold start, which
-measured 31.4s on two separate occasions; `streamable_http_client`'s default
-general timeout is 30s (`MCP_DEFAULT_TIMEOUT` in
-`mcp/shared/_httpx_utils.py`). So the connection is
-abandoned about a second too early and the user's first message errors, while
-the retry a moment later succeeds. Confirmed both ways: cold, the stream
-errors before `start-step` is emitted; warmed with one request first, the same
-chat answers normally. The fix is to pass `streamable_http_client` an
-`httpx2.AsyncClient` with a timeout that allows for a cold start, rather than
-relying on the default.
+**Fixed: the first chat after an idle period used to fail.** Both free
+services sleep. When the backend was awake and the MCP service was not, the
+backend's call had to wait out a cold start that measured 31.4s on two
+separate occasions, against `streamable_http_client`'s 30s default general
+timeout (`MCP_DEFAULT_TIMEOUT`). It gave up about a second early, so a user's
+first message errored and the retry worked. The router now passes its own
+`httpx2.AsyncClient` with `mcp_timeout_seconds` (90s) for connect, keeping the
+SDK's 300s read timeout, which governs something else: how long a response
+stream may stay open.
+
+The second half of the fix is what the failure *said*. anyio re-raises through
+a task group, so both the browser and the log got "unhandled errors in a
+TaskGroup (1 sub-exception)" and nothing about the cause -- which is why
+diagnosing it needed a local script to unwrap the group by hand. `unwrap()`
+now walks to the innermost cause, the router logs it with `exc_info`, and the
+browser is told what actually happened. A group with several sub-exceptions is
+left alone, having no single cause to report.
 
 **Blocked, not broken:**
 

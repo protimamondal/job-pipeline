@@ -16,6 +16,10 @@ dependencies = [
     "openai>=3.19.2",
     "langfuse>=4.15.6",
     "mcp>=2.2.0",
+    # Imported directly in the chat router, to give the MCP connection a
+    # timeout that survives a cold start. It arrives with mcp either way;
+    # declared because the code imports it by name.
+    "httpx2>=2.13.1",
     "redis>=8.1.0",
 ]
 
