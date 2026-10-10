@@ -483,8 +483,8 @@ traces.
       1,665-character cover letter in 4.5s. A signed-out visitor is
       redirected to `/login`.
 - [x] Fix the cold-start failure described below.
-- [ ] Re-run the copilot against a genuinely idle MCP service to confirm the
-      fix in production, then mark this sub-phase complete.
+- [x] Re-run the copilot against a genuinely idle MCP service: it answered
+      on the first attempt in 48.9s with the full tool loop.
 
 **Fixed: the first chat after an idle period used to fail.** Both free
 services sleep, and waking the MCP service is not merely slow. Two things
@@ -526,6 +526,26 @@ Its outcome is appended to the error the browser is shown. That is not
 tidiness: Render's logs cannot be read from a laptop, so a failure that does
 not carry its own diagnosis costs another twenty-minute wait for the service
 to fall asleep again.
+
+Waking it from the backend turned out to be impossible, which the wake's own
+diagnosis revealed on its first failure: `HTTP 429 after 0.3s`. Not slow, not
+booting -- refused. The same GET to the same URL at the same moment was held
+for 31.5s from a laptop and answered, while the service stayed asleep for the
+backend. **Render will not spin up a sleeping free service for a request
+coming from another Render service**, so a backend and an MCP server both
+hosted there cannot wake each other, and no amount of retrying from inside
+changes that. Every earlier fix was tuning patience for a door that nothing
+was knocking on.
+
+Vercel is outside Render, so the wake is fired there instead:
+`wakeJobSearchService()` in `web/app/api/chat/route.ts` requests the MCP
+service's origin when a chat starts. It is not awaited, so a warm chat is not
+delayed, and `cache: "no-store"` because a cached response would skip the
+request this function exists to make -- `after()` is the wrong tool despite
+appearances, since it runs once the response has finished. The backend's
+retries then wait out the boot. Verified against a genuinely sleeping
+service: the copilot answered on the first attempt in 48.9s, running the full
+tool loop, with the wake taking 41.9s.
 
 Finding the second fault depended on fixing how failures are reported. anyio
 re-raises through a task group, so the browser and the log both said
