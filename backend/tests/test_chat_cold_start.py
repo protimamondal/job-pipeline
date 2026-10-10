@@ -18,11 +18,15 @@ from fastapi.testclient import TestClient
 from app.routers import chat as chat_router
 from app.routers.chat import unwrap
 from app.settings import get_settings
-from tests.fakes import FakeLangfuse, FakeOpenAI, FakeSession, text_chunk
+from tests.fakes import FakeHttpClient, text_chunk
 from tests.test_chat_streaming import ask, events, install_fakes
 
-# What the cold start actually measured, twice, against the deployed service.
-OBSERVED_COLD_START_SECONDS = 31.4
+# What the cold start actually measured against the deployed service: 31.4s
+# twice, and 41.5s once.
+OBSERVED_COLD_START_SECONDS = 41.5
+
+# Captured at import, before the autouse fixture shortens them for the suite.
+PRODUCTION_BACKOFF = chat_router.MCP_RETRY_BACKOFF_SECONDS
 
 
 def test_the_mcp_connection_outlives_a_cold_start() -> None:
@@ -158,3 +162,120 @@ def test_the_failure_is_logged_with_the_real_exception(
     assert len(failures) == 1
     assert failures[0].error_type == "ConnectTimeout"
     assert failures[0].exc_info is not None
+
+
+# --- retrying the connection ----------------------------------------------
+#
+# A cold start is not only slow. Waking the deployed MCP service, the call
+# came straight back in 2.8s with a non-2xx status while it booted, and the
+# same request worked once the service was up. So the timeout alone was not
+# enough: the connection has to be attempted again.
+
+
+def test_the_production_backoff_is_long_enough_to_outlast_a_boot() -> None:
+    """Asserted here because the suite patches these to zero."""
+    assert chat_router.MCP_CONNECT_ATTEMPTS == 3
+    assert sum(PRODUCTION_BACKOFF) >= 10
+    assert len(PRODUCTION_BACKOFF) >= chat_router.MCP_CONNECT_ATTEMPTS - 1
+
+
+def test_a_connection_that_fails_once_is_retried_and_succeeds(
+    client: TestClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the live failure looked like: refused while booting, fine after."""
+    attempts = {"n": 0}
+
+    def flaky(url, *, http_client=None):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise ExceptionGroup(
+                "unhandled errors in a TaskGroup (1 sub-exception)",
+                [RuntimeError("Server returned an error response")],
+            )
+        return FakeHttpClient(url, http_client=http_client)
+
+    install_fakes(monkeypatch, turns=[[text_chunk("hello", finish_reason="stop")]])
+    monkeypatch.setattr(chat_router, "streamable_http_client", flaky)
+
+    received = events(ask(client, auth_headers))
+
+    assert attempts["n"] == 2
+    assert [e["type"] for e in received] == [
+        "start-step", "text-start", "text-delta", "text-end", "finish-step",
+    ]
+    assert received[2]["delta"] == "hello"
+
+
+def test_it_gives_up_after_the_last_attempt(
+    client: TestClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attempts = {"n": 0}
+
+    def always_fail(url, *, http_client=None):
+        attempts["n"] += 1
+        raise RuntimeError("Server returned an error response")
+
+    install_fakes(monkeypatch, turns=[[text_chunk("unused", finish_reason="stop")]])
+    monkeypatch.setattr(chat_router, "streamable_http_client", always_fail)
+
+    received = events(ask(client, auth_headers))
+
+    assert attempts["n"] == chat_router.MCP_CONNECT_ATTEMPTS
+    assert [e["type"] for e in received] == ["error"]
+    assert received[0]["errorText"] == "Server returned an error response"
+
+
+def test_a_healthy_server_is_connected_to_exactly_once(
+    client: TestClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The retry must not cost anything when nothing is wrong."""
+    attempts = {"n": 0}
+
+    def once(url, *, http_client=None):
+        attempts["n"] += 1
+        return FakeHttpClient(url, http_client=http_client)
+
+    install_fakes(monkeypatch, turns=[[text_chunk("hi", finish_reason="stop")]])
+    monkeypatch.setattr(chat_router, "streamable_http_client", once)
+
+    ask(client, auth_headers)
+
+    assert attempts["n"] == 1
+
+
+def test_a_failure_after_streaming_has_begun_is_not_retried(
+    client: TestClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Retrying mid-answer would repeat text the user has already read."""
+    attempts = {"n": 0}
+
+    class FailsAfterFirstEvent:
+        def __init__(self, url: str, *, http_client: object = None) -> None:
+            attempts["n"] += 1
+
+        async def __aenter__(self) -> tuple[object, object]:
+            return (object(), object())
+
+        async def __aexit__(self, *exc_info: object) -> bool:
+            return False
+
+    install_fakes(monkeypatch, turns=[[text_chunk("partial", finish_reason="stop")]])
+    monkeypatch.setattr(chat_router, "streamable_http_client", FailsAfterFirstEvent)
+
+    original = chat_router.get_openai_tools
+
+    async def tools_then_die(session):
+        tools = await original(session)
+        # Blow up after the first event has reached the browser.
+        chat_router.get_openai_tools = boom
+        return tools
+
+    async def boom(session):
+        raise RuntimeError("died mid-stream")
+
+    monkeypatch.setattr(chat_router, "get_openai_tools", tools_then_die)
+
+    ask(client, auth_headers)
+    monkeypatch.setattr(chat_router, "get_openai_tools", original)
+
+    assert attempts["n"] == 1

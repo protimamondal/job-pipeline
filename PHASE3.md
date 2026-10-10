@@ -487,22 +487,32 @@ traces.
       fix in production, then mark this sub-phase complete.
 
 **Fixed: the first chat after an idle period used to fail.** Both free
-services sleep. When the backend was awake and the MCP service was not, the
-backend's call had to wait out a cold start that measured 31.4s on two
-separate occasions, against `streamable_http_client`'s 30s default general
-timeout (`MCP_DEFAULT_TIMEOUT`). It gave up about a second early, so a user's
-first message errored and the retry worked. The router now passes its own
-`httpx2.AsyncClient` with `mcp_timeout_seconds` (90s) for connect, keeping the
-SDK's 300s read timeout, which governs something else: how long a response
-stream may stay open.
+services sleep, and waking the MCP service is not merely slow. Two things
+were wrong, and the first fix only found the second.
 
-The second half of the fix is what the failure *said*. anyio re-raises through
-a task group, so both the browser and the log got "unhandled errors in a
-TaskGroup (1 sub-exception)" and nothing about the cause -- which is why
-diagnosing it needed a local script to unwrap the group by hand. `unwrap()`
-now walks to the innermost cause, the router logs it with `exc_info`, and the
-browser is told what actually happened. A group with several sub-exceptions is
-left alone, having no single cause to report.
+The connection gave up too early. A cold start measured 31.4s twice and 41.5s
+once, against `streamable_http_client`'s 30s default general timeout
+(`MCP_DEFAULT_TIMEOUT`). The router now passes its own `httpx2.AsyncClient`
+with `mcp_timeout_seconds` (90s) for connect, keeping the SDK's 300s read
+timeout, which governs something else: how long a response stream may stay
+open.
+
+That was not the whole fault. Tested against a genuinely idle service, the
+call came back in 2.8s -- far short of any timeout -- with a non-2xx status
+while the service booted, and the same request worked once it was up. So the
+connection is now attempted up to three times, waiting 3s then 8s. The retry
+stops the moment anything has been streamed, because replaying a half-sent
+answer would duplicate text on the screen, and a healthy server is still
+connected to exactly once.
+
+Finding the second fault depended on fixing how failures are reported. anyio
+re-raises through a task group, so the browser and the log both said
+"unhandled errors in a TaskGroup (1 sub-exception)" and nothing about the
+cause -- the first diagnosis needed a local script to unwrap the group by
+hand, and it reached the wrong conclusion. `unwrap()` now walks to the
+innermost cause, the router logs it with `exc_info`, and the browser is told
+what actually happened; that is how the 2.8s failure named itself. A group
+with several sub-exceptions is left alone, having no single cause to report.
 
 **Blocked, not broken:**
 

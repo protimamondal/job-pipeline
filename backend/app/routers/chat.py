@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import uuid
@@ -19,6 +20,12 @@ from app.rate_limit import enforce_rate_limit
 router = APIRouter(prefix="/chat",tags=["chat"])
 
 logger = logging.getLogger("job_pipeline")
+
+# Waking a sleeping free-plan service is not simply slow: the call can come
+# straight back with an error status while the service boots. Retrying costs
+# nothing when the server is healthy, because then there is nothing to retry.
+MCP_CONNECT_ATTEMPTS = 3
+MCP_RETRY_BACKOFF_SECONDS = (3.0, 8.0)
 
 
 def unwrap(exc: BaseException) -> BaseException:
@@ -83,132 +90,156 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
     def event(payload: dict) -> str:
         return f'data:{json.dumps(payload)}\n\n'
 
+    async def attempt():
+        """One whole connection to the MCP server, from connect to answer."""
+        # The SDK's default 30s general timeout is shorter than a
+        # sleeping free-plan service takes to wake, so pass a client of
+        # our own. The read timeout stays at the SDK's 300s: that one
+        # governs how long a response stream may stay open, not the
+        # connection.
+        async with httpx2.AsyncClient(
+            timeout=httpx2.Timeout(settings.mcp_timeout_seconds, read=300.0)
+        ) as http_client, streamable_http_client(
+            settings.mcp_server_url, http_client=http_client
+        ) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                tools = await get_openai_tools(session)
+
+                for _ in range(5):
+                    text_id = None
+                    finish_reason = None
+                    # keyed by the tool call's position in this turn, since a
+                    # model can request more than one call at once
+                    tool_calls: dict[int, dict] = {}
+
+                    yield event({"type": "start-step"})
+
+                    async with await client.chat.completions.create(
+                        model=settings.draft_model,
+                        messages=messages,
+                        tools=tools,
+                        stream=True,
+                    ) as stream:
+                        async for chunk in stream:
+                            if await request.is_disconnected():
+                                return
+                            choice = chunk.choices[0]
+                            delta = choice.delta
+
+                            if choice.finish_reason:
+                                finish_reason = choice.finish_reason
+
+                            text = delta.content
+                            if text:
+                                if text_id is None:
+                                    text_id = str(uuid.uuid4())
+                                    yield event({"type": "text-start", "id": text_id})
+                                yield event({"type": "text-delta", "id": text_id, "delta": text})
+
+                            if delta.tool_calls:
+                                for tc in delta.tool_calls:
+                                    if tc.id is not None:
+                                        tool_calls[tc.index] = {
+                                            "id": tc.id,
+                                            "name": tc.function.name,
+                                            "arguments": "",
+                                        }
+                                        yield event({
+                                            "type": "tool-input-start",
+                                            "toolCallId": tc.id,
+                                            "toolName": tc.function.name,
+                                        })
+                                    entry = tool_calls[tc.index]
+                                    if tc.function.arguments:
+                                        entry["arguments"] += tc.function.arguments
+                                        yield event({
+                                            "type": "tool-input-delta",
+                                            "toolCallId": entry["id"],
+                                            "inputTextDelta": tc.function.arguments,
+                                        })
+
+                    if text_id is not None:
+                        yield event({"type": "text-end", "id": text_id})
+                    yield event({"type": "finish-step"})
+
+                    if finish_reason != "tool_calls":
+                        break  # a plain answer -- nothing left to do
+
+                    # OpenAI wants tools run -- do it for real, then loop
+                    # back for another step with the results in hand
+                    assistant_tool_calls = []
+                    tool_result_messages = []
+                    for entry in tool_calls.values():
+                        args = json.loads(entry["arguments"])
+                        yield event({
+                            "type": "tool-input-available",
+                            "toolCallId": entry["id"],
+                            "toolName": entry["name"],
+                            "input": args,
+                        })
+                        assistant_tool_calls.append({
+                            "id": entry["id"],
+                            "type": "function",
+                            "function": {"name": entry["name"], "arguments": entry["arguments"]},
+                        })
+                        try:
+                            result = await session.call_tool(entry["name"], args)
+                            if result.is_error:
+                                raise RuntimeError(tool_error_text(result))
+                            output = {"structuredContent": result.structured_content}
+                            yield event({
+                                "type": "tool-output-available",
+                                "toolCallId": entry["id"],
+                                "output": output,
+                            })
+                            tool_result_messages.append({
+                                "role": "tool",
+                                "tool_call_id": entry["id"],
+                                "content": json.dumps(output),
+                            })
+                        except Exception as exc:
+                            yield event({
+                                "type": "tool-output-error",
+                                "toolCallId": entry["id"],
+                                "errorText": str(exc),
+                            })
+                            tool_result_messages.append({
+                                "role": "tool",
+                                "tool_call_id": entry["id"],
+                                "content": f"Error: {exc}",
+                            })
+
+                    messages.append({
+                        "role": "assistant",
+                        "tool_calls": assistant_tool_calls,
+                        "content": None,
+                    })
+                    messages.extend(tool_result_messages)
+
     try:
         with langfuse.start_as_current_observation(name="copilot-chat", as_type="agent"):
-            # The SDK's default 30s general timeout is shorter than a
-            # sleeping free-plan service takes to wake, so pass a client of
-            # our own. The read timeout stays at the SDK's 300s: that one
-            # governs how long a response stream may stay open, not the
-            # connection.
-            async with httpx2.AsyncClient(
-                timeout=httpx2.Timeout(settings.mcp_timeout_seconds, read=300.0)
-            ) as http_client, streamable_http_client(
-                settings.mcp_server_url, http_client=http_client
-            ) as (read_stream, write_stream):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    tools = await get_openai_tools(session)
-
-                    for _ in range(5):
-                        text_id = None
-                        finish_reason = None
-                        # keyed by the tool call's position in this turn, since a
-                        # model can request more than one call at once
-                        tool_calls: dict[int, dict] = {}
-
-                        yield event({"type": "start-step"})
-
-                        async with await client.chat.completions.create(
-                            model=settings.draft_model,
-                            messages=messages,
-                            tools=tools,
-                            stream=True,
-                        ) as stream:
-                            async for chunk in stream:
-                                if await request.is_disconnected():
-                                    return
-                                choice = chunk.choices[0]
-                                delta = choice.delta
-
-                                if choice.finish_reason:
-                                    finish_reason = choice.finish_reason
-
-                                text = delta.content
-                                if text:
-                                    if text_id is None:
-                                        text_id = str(uuid.uuid4())
-                                        yield event({"type": "text-start", "id": text_id})
-                                    yield event({"type": "text-delta", "id": text_id, "delta": text})
-
-                                if delta.tool_calls:
-                                    for tc in delta.tool_calls:
-                                        if tc.id is not None:
-                                            tool_calls[tc.index] = {
-                                                "id": tc.id,
-                                                "name": tc.function.name,
-                                                "arguments": "",
-                                            }
-                                            yield event({
-                                                "type": "tool-input-start",
-                                                "toolCallId": tc.id,
-                                                "toolName": tc.function.name,
-                                            })
-                                        entry = tool_calls[tc.index]
-                                        if tc.function.arguments:
-                                            entry["arguments"] += tc.function.arguments
-                                            yield event({
-                                                "type": "tool-input-delta",
-                                                "toolCallId": entry["id"],
-                                                "inputTextDelta": tc.function.arguments,
-                                            })
-
-                        if text_id is not None:
-                            yield event({"type": "text-end", "id": text_id})
-                        yield event({"type": "finish-step"})
-
-                        if finish_reason != "tool_calls":
-                            break  # a plain answer -- nothing left to do
-
-                        # OpenAI wants tools run -- do it for real, then loop
-                        # back for another step with the results in hand
-                        assistant_tool_calls = []
-                        tool_result_messages = []
-                        for entry in tool_calls.values():
-                            args = json.loads(entry["arguments"])
-                            yield event({
-                                "type": "tool-input-available",
-                                "toolCallId": entry["id"],
-                                "toolName": entry["name"],
-                                "input": args,
-                            })
-                            assistant_tool_calls.append({
-                                "id": entry["id"],
-                                "type": "function",
-                                "function": {"name": entry["name"], "arguments": entry["arguments"]},
-                            })
-                            try:
-                                result = await session.call_tool(entry["name"], args)
-                                if result.is_error:
-                                    raise RuntimeError(tool_error_text(result))
-                                output = {"structuredContent": result.structured_content}
-                                yield event({
-                                    "type": "tool-output-available",
-                                    "toolCallId": entry["id"],
-                                    "output": output,
-                                })
-                                tool_result_messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": entry["id"],
-                                    "content": json.dumps(output),
-                                })
-                            except Exception as exc:
-                                yield event({
-                                    "type": "tool-output-error",
-                                    "toolCallId": entry["id"],
-                                    "errorText": str(exc),
-                                })
-                                tool_result_messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": entry["id"],
-                                    "content": f"Error: {exc}",
-                                })
-
-                        messages.append({
-                            "role": "assistant",
-                            "tool_calls": assistant_tool_calls,
-                            "content": None,
-                        })
-                        messages.extend(tool_result_messages)
+            for attempt_number in range(1, MCP_CONNECT_ATTEMPTS + 1):
+                streamed = False
+                try:
+                    async for payload in attempt():
+                        streamed = True
+                        yield payload
+                    break
+                except Exception as exc:
+                    # Only a failure to connect is worth retrying, and only
+                    # while the browser has seen nothing: replaying a
+                    # half-sent answer would duplicate text on the screen.
+                    if streamed or attempt_number == MCP_CONNECT_ATTEMPTS:
+                        raise
+                    logger.warning(
+                        "mcp_connect_retry",
+                        extra={
+                            "attempt": attempt_number,
+                            "error_type": type(unwrap(exc)).__name__,
+                        },
+                    )
+                    await asyncio.sleep(MCP_RETRY_BACKOFF_SECONDS[attempt_number - 1])
 
     except Exception as exc:
         cause = unwrap(exc)

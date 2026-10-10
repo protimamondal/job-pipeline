@@ -99,6 +99,20 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
     return fake
 
 
+@pytest.fixture(autouse=True)
+def instant_mcp_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the retry backoff out of the suite's wall-clock time.
+
+    The real values are asserted directly in `test_chat_cold_start.py`; here
+    they would only make every failure test wait eleven seconds.
+    """
+    from app.routers import chat as chat_router
+
+    monkeypatch.setattr(
+        chat_router, "MCP_RETRY_BACKOFF_SECONDS", (0.0,) * chat_router.MCP_CONNECT_ATTEMPTS
+    )
+
+
 @pytest.fixture
 def stub_chat_ai(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make `/chat` answer instantly without calling OpenAI or the MCP server.
