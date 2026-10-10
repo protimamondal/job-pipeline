@@ -459,20 +459,35 @@ traces.
       backend is healthy — the most likely first failure.
 - [ ] Create a Langfuse production project and set its three variables, then
       confirm a live trace arrives.
-- [ ] Run the acceptance check against the live URLs and mark this sub-phase
-      complete. Blocked on the two items below, neither of which is a code or
-      deployment fault.
+- [x] Run the acceptance check against the live URLs. Everything passes
+      except the first request after an idle period: auth, persistence, the
+      jobs list, applications, both AI surfaces, the tool loop, and the rate
+      limiter (20 allowed, the 21st a 429 with `Retry-After: 60`, counted in
+      the real Key Value instance — probed against a missing job id, so it
+      cost nothing in tokens).
+- [ ] Fix the cold-start failure below, then mark this sub-phase complete.
+
+**Found by the live acceptance run — the first chat after an idle period
+fails.** Both free services sleep. When the backend is awake but the MCP
+service is not, the backend's call to it has to wait for a cold start, which
+measured 31.4s; `streamable_http_client`'s default general timeout is 30s
+(`MCP_DEFAULT_TIMEOUT` in `mcp/shared/_httpx_utils.py`). So the connection is
+abandoned about a second too early and the user's first message errors, while
+the retry a moment later succeeds. Confirmed both ways: cold, the stream
+errors before `start-step` is emitted; warmed with one request first, the same
+chat answers normally. The fix is to pass `streamable_http_client` an
+`httpx2.AsyncClient` with a timeout that allows for a cold start, rather than
+relying on the default.
 
 **Blocked, not broken:**
 
-- The OpenAI account has no credits. Both AI surfaces fail with
-  `RateLimitError: 429 ... credit_balance_exhausted`, and it reproduces
-  locally with the same key, so it is an account-level billing state rather
-  than anything about the deployment. The browser sees it as one `error`
-  event, because `streamable_http_client` runs inside an anyio task group
-  whose `__aexit__` rewraps the real exception as `unhandled errors in a
-  TaskGroup (1 sub-exception)`. Worth noting as a diagnosability problem: the
-  error that reaches the log says nothing about what actually failed.
+- ~~The OpenAI account has no credits~~ — credits added, and both AI
+  surfaces now work against the live URL. Verified: a plain chat streams back
+  `pong`; a chat that needs the tool runs the full two-round loop, calls
+  `search_job` over the live MCP service and answers from real Arbeitnow
+  results; `POST /jobs/1/draft` streams a 263-delta cover letter citing
+  `[[job]]` and `[[profile]]`, an extra `instruction` is honoured, and a
+  missing job is still a 404.
 - ~~The production `jobs` table is empty~~ — fixed by `seed_if_empty.py`,
   which the container runs straight after the migrations. The jobs list is
   browse-only by design, so nothing in the product can populate a new
