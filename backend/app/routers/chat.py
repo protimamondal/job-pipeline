@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import uuid
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx2
 from fastapi import APIRouter, Depends, Request
@@ -87,6 +88,39 @@ async def get_openai_tools(session: ClientSession) -> list[dict]:
     ]
 
 
+async def wake_mcp_server(settings) -> str:
+    """Knock on the MCP service's door and wait for it to open.
+
+    A plain request to a sleeping free-plan service is *held* until it has
+    booted -- measured at 31.8s from this very library, answering 200 --
+    whereas the MCP client's own connection comes straight back refused
+    without waking anything. Whatever the difference is, this makes the wait
+    happen deliberately, on a request whose answer does not matter: any
+    status at all means something is now listening.
+
+    Returns a short description, for the log and for the error the browser is
+    shown if everything still fails.
+    """
+    parts = urlsplit(settings.mcp_server_url)
+    root = urlunsplit((parts.scheme, parts.netloc, "/", "", ""))
+
+    started = time.monotonic()
+    try:
+        async with httpx2.AsyncClient(
+            timeout=httpx2.Timeout(settings.mcp_timeout_seconds)
+        ) as client:
+            response = await client.get(root)
+        outcome = f"HTTP {response.status_code}"
+    except Exception as exc:
+        outcome = f"{type(exc).__name__}: {exc}"
+
+    waited = round(time.monotonic() - started, 1)
+    logger.info(
+        "mcp_wake_attempt", extra={"outcome": outcome, "waited_seconds": waited}
+    )
+    return f"{outcome} after {waited}s"
+
+
 async def chat_stream(request: Request, ui_messages: list[dict]):
     settings = get_settings()
     client = AsyncOpenAI(api_key=settings.openai_api_key)
@@ -95,6 +129,8 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
 
     def event(payload: dict) -> str:
         return f'data:{json.dumps(payload)}\n\n'
+
+    wake_outcome: str | None = None
 
     async def attempt():
         """One whole connection to the MCP server, from connect to answer."""
@@ -255,16 +291,25 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
                             "error_type": type(unwrap(exc)).__name__,
                         },
                     )
+                    # A sleeping service has to be woken by a request it
+                    # will actually hold onto; the MCP client's own is
+                    # refused without waking anything.
+                    wake_outcome = await wake_mcp_server(settings)
                     await asyncio.sleep(backoff)
 
     except Exception as exc:
         cause = unwrap(exc)
         logger.error(
             "chat_stream_failed",
-            extra={"error_type": type(cause).__name__},
+            extra={"error_type": type(cause).__name__, "wake": wake_outcome},
             exc_info=cause,
         )
-        yield event({"type": "error", "errorText": str(cause)})
+        text = str(cause)
+        if wake_outcome is not None:
+            # Render's logs are out of reach from a laptop, so the response
+            # itself is the one place this diagnosis can surface.
+            text = f"{text} (job search service wake-up: {wake_outcome})"
+        yield event({"type": "error", "errorText": text})
 
     langfuse.flush()
     yield "data: [DONE]\n\n"

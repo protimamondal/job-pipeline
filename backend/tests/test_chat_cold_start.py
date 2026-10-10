@@ -11,6 +11,8 @@ errors in a TaskGroup (1 sub-exception)" and nothing else.
 
 import json
 
+from types import SimpleNamespace
+
 import httpx2
 import pytest
 from fastapi.testclient import TestClient
@@ -27,6 +29,8 @@ OBSERVED_COLD_START_SECONDS = 41.5
 
 # Captured at import, before the autouse fixture shortens them for the suite.
 PRODUCTION_BACKOFF = chat_router.MCP_RETRY_BACKOFF_SECONDS
+# Likewise: the fixture stubs the wake out, and these two tests want the real one.
+real_wake_mcp_server = chat_router.wake_mcp_server
 
 
 def test_the_mcp_connection_outlives_a_cold_start() -> None:
@@ -134,7 +138,7 @@ def test_a_timeout_reaches_the_browser_as_itself(
     received = events(response)
 
     assert [e["type"] for e in received] == ["error"]
-    assert received[0]["errorText"] == "connect timed out"
+    assert received[0]["errorText"].startswith("connect timed out")
     assert "TaskGroup" not in received[0]["errorText"]
     assert response.text.endswith("data: [DONE]\n\n")
 
@@ -243,7 +247,7 @@ def test_it_gives_up_after_the_last_attempt(
 
     assert attempts["n"] == chat_router.MCP_CONNECT_ATTEMPTS
     assert [e["type"] for e in received] == ["error"]
-    assert received[0]["errorText"] == "Server returned an error response"
+    assert received[0]["errorText"].startswith("Server returned an error response")
 
 
 def test_a_healthy_server_is_connected_to_exactly_once(
@@ -324,3 +328,139 @@ def test_the_deadline_stops_a_server_that_is_down_rather_than_asleep(
     assert attempts["n"] == 3
     assert attempts["n"] < chat_router.MCP_CONNECT_ATTEMPTS
     assert [e["type"] for e in received] == ["error"]
+
+
+# --- waking the service ----------------------------------------------------
+#
+# The retries alone were still not enough: against a sleeping service every
+# attempt was refused, even ones landing well after the 41.5s wake. Yet a
+# plain httpx2 GET from the same library was *held* for 31.8s and answered
+# 200. So the connection is not what wakes the service -- an ordinary request
+# is -- and that is now done deliberately.
+
+
+def test_a_failed_connection_triggers_a_wake(
+    client: TestClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wakes = {"n": 0}
+    attempts = {"n": 0}
+
+    async def count_wake(settings) -> str:
+        wakes["n"] += 1
+        return "HTTP 404 after 31.8s"
+
+    def flaky(url, *, http_client=None):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise RuntimeError("Server returned an error response")
+        return FakeHttpClient(url, http_client=http_client)
+
+    install_fakes(monkeypatch, turns=[[text_chunk("hi", finish_reason="stop")]])
+    monkeypatch.setattr(chat_router, "streamable_http_client", flaky)
+    monkeypatch.setattr(chat_router, "wake_mcp_server", count_wake)
+
+    received = events(ask(client, auth_headers))
+
+    assert wakes["n"] == 1
+    assert [e["type"] for e in received][-1] == "finish-step"
+
+
+def test_a_healthy_server_is_never_woken(
+    client: TestClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wake costs a whole extra request, so it must stay on the sad path."""
+    wakes = {"n": 0}
+
+    async def count_wake(settings) -> str:
+        wakes["n"] += 1
+        return "unexpected"
+
+    install_fakes(monkeypatch, turns=[[text_chunk("hi", finish_reason="stop")]])
+    monkeypatch.setattr(chat_router, "wake_mcp_server", count_wake)
+
+    ask(client, auth_headers)
+
+    assert wakes["n"] == 0
+
+
+def test_the_wake_outcome_reaches_the_browser_when_all_else_fails(
+    client: TestClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Render's logs cannot be read from a laptop, so a failure has to carry
+    its own diagnosis."""
+    async def wake(settings) -> str:
+        return "HTTP 503 after 0.4s"
+
+    def always_fail(url, *, http_client=None):
+        raise RuntimeError("Server returned an error response")
+
+    install_fakes(monkeypatch, turns=[[text_chunk("unused", finish_reason="stop")]])
+    monkeypatch.setattr(chat_router, "streamable_http_client", always_fail)
+    monkeypatch.setattr(chat_router, "wake_mcp_server", wake)
+
+    received = events(ask(client, auth_headers))
+
+    assert [e["type"] for e in received] == ["error"]
+    assert "Server returned an error response" in received[0]["errorText"]
+    assert "HTTP 503 after 0.4s" in received[0]["errorText"]
+
+
+def test_the_wake_asks_for_the_service_root_not_the_mcp_path(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Any status proves something is listening, and the root avoids opening
+    an MCP session that nothing will ever use."""
+    import asyncio
+
+    import httpx2 as real_httpx2
+
+    asked: dict[str, str] = {}
+
+    class RecordingClient:
+        def __init__(self, **kwargs) -> None:
+            asked["timeout"] = kwargs.get("timeout")
+
+        async def __aenter__(self) -> "RecordingClient":
+            return self
+
+        async def __aexit__(self, *exc_info: object) -> bool:
+            return False
+
+        async def get(self, url: str):
+            asked["url"] = url
+            return SimpleNamespace(status_code=404)
+
+    monkeypatch.setattr(chat_router.httpx2, "AsyncClient", RecordingClient)
+
+    outcome = asyncio.run(real_wake_mcp_server(get_settings()))
+
+    assert asked["url"] == "http://127.0.0.1:8001/"
+    assert "HTTP 404" in outcome
+    assert isinstance(asked["timeout"], real_httpx2.Timeout)
+
+
+def test_a_wake_that_itself_fails_is_reported_not_raised(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """It runs on the failure path; throwing there would mask the real error."""
+    import asyncio
+
+    class Exploding:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self) -> "Exploding":
+            return self
+
+        async def __aexit__(self, *exc_info: object) -> bool:
+            return False
+
+        async def get(self, url: str):
+            raise OSError("no route to host")
+
+    monkeypatch.setattr(chat_router.httpx2, "AsyncClient", Exploding)
+
+    outcome = asyncio.run(real_wake_mcp_server(get_settings()))
+
+    assert "OSError" in outcome
+    assert "no route to host" in outcome

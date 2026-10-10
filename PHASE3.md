@@ -497,7 +497,7 @@ with `mcp_timeout_seconds` (90s) for connect, keeping the SDK's 300s read
 timeout, which governs something else: how long a response stream may stay
 open.
 
-That was not the whole fault. Tested against a genuinely idle service, the
+That was not the whole fault, and the second attempt was wrong too. Tested against a genuinely idle service, the
 call came back in 2.8s -- far short of any timeout -- with a non-2xx status
 while the service booted, and the same request worked once it was up. So the
 connection is retried. The first attempt at that was also wrong: three tries
@@ -509,6 +509,23 @@ rather than asleep does not hold the request open to the end. The retry stops
 the moment anything has been streamed, because replaying a half-sent answer
 would duplicate text on the screen, and a healthy server is still connected
 to exactly once.
+
+Retrying for longer did not fix it either. Against a genuinely sleeping
+service every attempt was refused, including ones landing at 49s and 69s,
+long after the 41.5s wake -- so "it needs more time" was wrong twice over.
+What settled it was measuring instead of reasoning: a plain `httpx2` GET,
+from the same library the backend uses, was *held* for 31.8s and answered
+200, while the MCP client's own connection came straight back refused and
+left the service asleep. So an ordinary request wakes it and the MCP
+connection does not. `wake_mcp_server()` now makes that ordinary request --
+a GET to the service root, where any status at all proves something is
+listening -- on the failure path only, before each retry. A healthy server
+is never woken, which is asserted, because it costs a whole extra request.
+
+Its outcome is appended to the error the browser is shown. That is not
+tidiness: Render's logs cannot be read from a laptop, so a failure that does
+not carry its own diagnosis costs another twenty-minute wait for the service
+to fall asleep again.
 
 Finding the second fault depended on fixing how failures are reported. anyio
 re-raises through a task group, so the browser and the log both said

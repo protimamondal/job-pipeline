@@ -112,6 +112,12 @@ def instant_mcp_retries(monkeypatch: pytest.MonkeyPatch) -> None:
         chat_router, "MCP_RETRY_BACKOFF_SECONDS", (0.0,) * chat_router.MCP_CONNECT_ATTEMPTS
     )
 
+    async def no_real_wake(settings) -> str:
+        return "stubbed"
+
+    # Otherwise every retry makes a real HTTP call to the configured MCP URL.
+    monkeypatch.setattr(chat_router, "wake_mcp_server", no_real_wake)
+
 
 @pytest.fixture
 def stub_chat_ai(monkeypatch: pytest.MonkeyPatch) -> None:
