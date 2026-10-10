@@ -172,11 +172,32 @@ def test_the_failure_is_logged_with_the_real_exception(
 # enough: the connection has to be attempted again.
 
 
-def test_the_production_backoff_is_long_enough_to_outlast_a_boot() -> None:
-    """Asserted here because the suite patches these to zero."""
-    assert chat_router.MCP_CONNECT_ATTEMPTS == 3
-    assert sum(PRODUCTION_BACKOFF) >= 10
-    assert len(PRODUCTION_BACKOFF) >= chat_router.MCP_CONNECT_ATTEMPTS - 1
+def test_the_retries_keep_going_for_longer_than_a_boot_takes() -> None:
+    """The point the first attempt at this fix got wrong.
+
+    Three tries over eleven seconds all failed against a service that needed
+    41.5s to wake. What matters is not the number of attempts but how long
+    the last one happens, so that is what is asserted.
+    """
+    waited = 0.0
+    for attempt in range(1, chat_router.MCP_CONNECT_ATTEMPTS):
+        waited += PRODUCTION_BACKOFF[min(attempt, len(PRODUCTION_BACKOFF)) - 1]
+
+    assert waited > OBSERVED_COLD_START_SECONDS
+    assert waited <= chat_router.MCP_CONNECT_DEADLINE_SECONDS
+
+
+def test_an_attempt_lands_shortly_after_the_boot_finishes() -> None:
+    """A retry schedule that only tried again at 89s would technically pass
+    the test above while making the user wait twice as long as needed."""
+    waited = 0.0
+    for attempt in range(1, chat_router.MCP_CONNECT_ATTEMPTS):
+        waited += PRODUCTION_BACKOFF[min(attempt, len(PRODUCTION_BACKOFF)) - 1]
+        if waited > OBSERVED_COLD_START_SECONDS:
+            assert waited < OBSERVED_COLD_START_SECONDS * 1.5
+            return
+
+    raise AssertionError("no attempt falls just after the boot")
 
 
 def test_a_connection_that_fails_once_is_retried_and_succeeds(
@@ -279,3 +300,27 @@ def test_a_failure_after_streaming_has_begun_is_not_retried(
     monkeypatch.setattr(chat_router, "get_openai_tools", original)
 
     assert attempts["n"] == 1
+
+
+def test_the_deadline_stops_a_server_that_is_down_rather_than_asleep(
+    client: TestClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without this, a dead server holds the request open for the whole
+    backoff sequence before admitting defeat."""
+    attempts = {"n": 0}
+
+    def always_fail(url, *, http_client=None):
+        attempts["n"] += 1
+        raise RuntimeError("Server returned an error response")
+
+    install_fakes(monkeypatch, turns=[[text_chunk("unused", finish_reason="stop")]])
+    monkeypatch.setattr(chat_router, "streamable_http_client", always_fail)
+    monkeypatch.setattr(chat_router, "MCP_RETRY_BACKOFF_SECONDS", (0.05,))
+    monkeypatch.setattr(chat_router, "MCP_CONNECT_DEADLINE_SECONDS", 0.12)
+
+    received = events(ask(client, auth_headers))
+
+    # Two sleeps fit inside the deadline, the third would not.
+    assert attempts["n"] == 3
+    assert attempts["n"] < chat_router.MCP_CONNECT_ATTEMPTS
+    assert [e["type"] for e in received] == ["error"]

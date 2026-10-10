@@ -10,15 +10,30 @@ Redis itself is `tests.fakes.FakeRedis`, installed for every test by the
 autouse `fake_redis` fixture in `conftest.py`.
 """
 
-import time
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
+from app import rate_limit
 from app.rate_limit import RATE_LIMIT_PER_MINUTE, WINDOW_SECONDS
 from tests.fakes import FakeRedis
+
+# A moment pinned exactly on a window boundary. The window number is part of
+# the key, so a test that sends twenty requests and then asserts the
+# twenty-first is refused fails if the minute happens to tick over in the
+# middle -- the counter starts again under a new key and the request is
+# allowed. That is correct behaviour and a broken test: rare, timing
+# dependent, and it duly appeared once the suite grew slower.
+FROZEN_NOW = 1_700_000_040.0
+
+
+@pytest.fixture(autouse=True)
+def frozen_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hold the limiter's clock still, so no test straddles two windows."""
+    monkeypatch.setattr(rate_limit, "time", SimpleNamespace(time=lambda: FROZEN_NOW))
 
 
 def chat(client: TestClient, headers: dict):
@@ -36,7 +51,7 @@ def draft(client: TestClient, headers: dict):
 
 
 def current_key(user_id: int) -> str:
-    return f"ratelimit:{user_id}:{int(time.time() // WINDOW_SECONDS)}"
+    return f"ratelimit:{user_id}:{int(FROZEN_NOW // WINDOW_SECONDS)}"
 
 
 # --- the policy -----------------------------------------------------------
@@ -150,7 +165,7 @@ def test_a_new_window_starts_a_new_counter(
     exhausts one window can immediately spend a whole second window, so up to
     2x the limit can land either side of a minute boundary.
     """
-    previous_window = int(time.time() // WINDOW_SECONDS) - 1
+    previous_window = int(FROZEN_NOW // WINDOW_SECONDS) - 1
     fake_redis.values[f"ratelimit:1:{previous_window}"] = RATE_LIMIT_PER_MINUTE
 
     # The old window is full, but we are no longer in it.

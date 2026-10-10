@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 import uuid
 
 import httpx2
@@ -21,11 +22,16 @@ router = APIRouter(prefix="/chat",tags=["chat"])
 
 logger = logging.getLogger("job_pipeline")
 
-# Waking a sleeping free-plan service is not simply slow: the call can come
-# straight back with an error status while the service boots. Retrying costs
-# nothing when the server is healthy, because then there is nothing to retry.
-MCP_CONNECT_ATTEMPTS = 3
-MCP_RETRY_BACKOFF_SECONDS = (3.0, 8.0)
+# Waking a sleeping free-plan service is not simply slow: while it boots, the
+# call comes straight back with an error status, in under three seconds. The
+# wake itself measured 41.5s twice, so retrying has to keep going for longer
+# than that -- an earlier attempt gave up after 11s and still failed. Retrying
+# costs nothing when the server is healthy, because then there is no retry.
+MCP_CONNECT_ATTEMPTS = 8
+MCP_RETRY_BACKOFF_SECONDS = (3.0, 5.0, 8.0, 13.0, 20.0, 20.0, 20.0)
+# A backstop on the total wait, so a server that is down rather than asleep
+# does not hold the request open for the whole backoff sequence.
+MCP_CONNECT_DEADLINE_SECONDS = 90.0
 
 
 def unwrap(exc: BaseException) -> BaseException:
@@ -219,6 +225,7 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
 
     try:
         with langfuse.start_as_current_observation(name="copilot-chat", as_type="agent"):
+            started = time.monotonic()
             for attempt_number in range(1, MCP_CONNECT_ATTEMPTS + 1):
                 streamed = False
                 try:
@@ -230,16 +237,25 @@ async def chat_stream(request: Request, ui_messages: list[dict]):
                     # Only a failure to connect is worth retrying, and only
                     # while the browser has seen nothing: replaying a
                     # half-sent answer would duplicate text on the screen.
-                    if streamed or attempt_number == MCP_CONNECT_ATTEMPTS:
+                    backoff = MCP_RETRY_BACKOFF_SECONDS[
+                        min(attempt_number, len(MCP_RETRY_BACKOFF_SECONDS)) - 1
+                    ]
+                    waited = time.monotonic() - started
+                    if (
+                        streamed
+                        or attempt_number == MCP_CONNECT_ATTEMPTS
+                        or waited + backoff > MCP_CONNECT_DEADLINE_SECONDS
+                    ):
                         raise
                     logger.warning(
                         "mcp_connect_retry",
                         extra={
                             "attempt": attempt_number,
+                            "waited_seconds": round(waited, 1),
                             "error_type": type(unwrap(exc)).__name__,
                         },
                     )
-                    await asyncio.sleep(MCP_RETRY_BACKOFF_SECONDS[attempt_number - 1])
+                    await asyncio.sleep(backoff)
 
     except Exception as exc:
         cause = unwrap(exc)

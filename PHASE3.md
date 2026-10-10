@@ -500,10 +500,15 @@ open.
 That was not the whole fault. Tested against a genuinely idle service, the
 call came back in 2.8s -- far short of any timeout -- with a non-2xx status
 while the service booted, and the same request worked once it was up. So the
-connection is now attempted up to three times, waiting 3s then 8s. The retry
-stops the moment anything has been streamed, because replaying a half-sent
-answer would duplicate text on the screen, and a healthy server is still
-connected to exactly once.
+connection is retried. The first attempt at that was also wrong: three tries
+over 11s, against a wake that measured 41.5s twice. What matters is not how
+many attempts but how late the last one falls, so the backoff now runs
+3, 5, 8, 13, 20, 20, 20 seconds -- an attempt lands at 49s, comfortably after
+a boot, and the schedule is capped by a 90s deadline so a server that is down
+rather than asleep does not hold the request open to the end. The retry stops
+the moment anything has been streamed, because replaying a half-sent answer
+would duplicate text on the screen, and a healthy server is still connected
+to exactly once.
 
 Finding the second fault depended on fixing how failures are reported. anyio
 re-raises through a task group, so the browser and the log both said
