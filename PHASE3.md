@@ -452,11 +452,22 @@ traces.
       The MCP service answers an `initialize` handshake over
       `POST /mcp` and lists its one tool, `search_job`. It has no `/health`
       route, by design, so a 404 there is not a fault.
-- [ ] Set `NEXT_PUBLIC_BACKEND_URL` on Vercel to the live backend (needs the
-      Vercel dashboard).
-- [ ] Set `JOB_PIPELINE_CORS_ORIGINS` to the Vercel origin once it is known.
-      Until this is right the browser will be refused by CORS even though the
-      backend is healthy — the most likely first failure.
+- [x] Set `NEXT_PUBLIC_BACKEND_URL` on Vercel to the live backend. Adding the
+      variable was not enough: a `NEXT_PUBLIC_` value is stamped into the
+      bundle at build time, so it took a redeploy. Until then Vercel's server
+      fell back to `http://127.0.0.1:8000` and every route crashed with a 500
+      — recognisable because a wrong password returned 500 rather than the
+      401 the route returns when the backend actually answers.
+- [x] Set `JOB_PIPELINE_CORS_ORIGINS` to the Vercel origin. It is a
+      `list[str]`, and pydantic-settings parses a complex field from the
+      environment as JSON, so the obvious bare URL crashes the service on
+      boot with a `JSONDecodeError` that never mentions the variable's shape.
+      The value has to be `["https://job-pipeline-weld.vercel.app"]`.
+      Calling this the likeliest first failure was wrong: the frontend calls
+      FastAPI only from its own `/api/*` route handlers, which run on
+      Vercel's server, so the browser never makes a cross-origin request and
+      CORS is not on the path at all. Verified anyway — the Vercel origin is
+      granted, an unknown origin is not.
 - [ ] Create a Langfuse production project and set its three variables, then
       confirm a live trace arrives.
 - [x] Run the acceptance check against the live URLs. Everything passes
@@ -465,13 +476,21 @@ traces.
       limiter (20 allowed, the 21st a 429 with `Retry-After: 60`, counted in
       the real Key Value instance — probed against a missing job id, so it
       cost nothing in tokens).
+- [x] Run the acceptance check through the deployed frontend, not only
+      against the backend: sign up sets the session cookie, the jobs page
+      renders all seven jobs, a job page renders, applying returns 201 and
+      the job appears on the board, and `POST /api/draft` streams a
+      1,665-character cover letter in 4.5s. A signed-out visitor is
+      redirected to `/login`.
 - [ ] Fix the cold-start failure below, then mark this sub-phase complete.
+      It is the only thing left.
 
 **Found by the live acceptance run — the first chat after an idle period
 fails.** Both free services sleep. When the backend is awake but the MCP
 service is not, the backend's call to it has to wait for a cold start, which
-measured 31.4s; `streamable_http_client`'s default general timeout is 30s
-(`MCP_DEFAULT_TIMEOUT` in `mcp/shared/_httpx_utils.py`). So the connection is
+measured 31.4s on two separate occasions; `streamable_http_client`'s default
+general timeout is 30s (`MCP_DEFAULT_TIMEOUT` in
+`mcp/shared/_httpx_utils.py`). So the connection is
 abandoned about a second too early and the user's first message errors, while
 the retry a moment later succeeds. Confirmed both ways: cold, the stream
 errors before `start-step` is emitted; warmed with one request first, the same
