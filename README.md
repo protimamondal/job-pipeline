@@ -110,7 +110,8 @@ cd backend
 cp .env.example .env        # then fill in the two CHANGE_ME values
 uv sync --frozen
 uv run alembic upgrade head
-uv run python seed.py
+uv run python seed.py              # the 7 sample jobs (empties jobs first)
+uv run python import_arbeitnow.py  # about 100 real English jobs, for RAG
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
@@ -133,12 +134,14 @@ nothing is rate limited, which is logged but not fatal.
 ### Tests
 
 ```bash
-cd backend && uv run pytest        # 73 tests, no containers needed
+cd backend && uv run pytest        # 100 tests, needs the Postgres container
 cd mcp-server && uv run pytest     # 20 tests
 ```
 
 The backend suite needs the Postgres container, because it runs against a
-real `job_pipeline_test` database. Redis is faked, so no container is needed
+real `job_pipeline_test` database. Create it once, after creating the
+container: `docker exec job-pipeline-pg createdb -U job_pipeline job_pipeline_test`.
+Redis is faked, so no container is needed
 for it.
 
 ## Deploy

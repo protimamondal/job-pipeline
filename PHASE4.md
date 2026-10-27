@@ -89,7 +89,12 @@ the existing `jobs`, `users`, and `applications` tables.
       for public jobs and set for private rows, which is the privacy filter;
       `job_id` is NULL for a resume. Job descriptions are copied in, so
       `jobs` stays the source of truth and `documents` can be rebuilt.
-- [ ] Import about 100 Arbeitnow jobs.
+- [x] Import about 100 Arbeitnow jobs (`backend/import_arbeitnow.py`, written
+      by the agent at Protima's request). English only (about half the board
+      is German); HTML, including escaped `&lt;p&gt;` tags, turned into plain
+      text with one block per line; the "Find Jobs in … on Arbeitnow" footer
+      removed. 100 is a total, so a second run inserts 0. Duplicates skipped
+      by URL and by company + title. Local: 107 jobs. Not run on Render yet.
 - [ ] Resume entered as pasted text, per user.
 
 **Acceptance:** `CREATE EXTENSION vector` succeeds locally and in production;
