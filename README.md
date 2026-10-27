@@ -91,7 +91,7 @@ defaults: another project on the development machine already holds 5432 and
 6379.
 
 ```bash
-docker run -d --name job-pipeline-pg -p 5433:5432   -e POSTGRES_USER=job_pipeline -e POSTGRES_PASSWORD=devpassword   -e POSTGRES_DB=job_pipeline postgres:17
+docker run -d --name job-pipeline-pg -p 5433:5432   -e POSTGRES_USER=job_pipeline -e POSTGRES_PASSWORD=devpassword   -e POSTGRES_DB=job_pipeline pgvector/pgvector:pg17
 docker run -d --name job-pipeline-redis -p 6380:6379 redis:7-alpine
 ```
 
