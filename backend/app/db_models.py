@@ -1,4 +1,4 @@
-from sqlalchemy import Text , ForeignKey, func ,UniqueConstraint, DateTime
+from sqlalchemy import Text, ForeignKey, func, UniqueConstraint, DateTime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from datetime import datetime
 
@@ -26,20 +26,39 @@ class User(Base):
     name: Mapped[str]
     email: Mapped[str] = mapped_column(unique=True)
     hashed_password: Mapped[str]
-    created_at: Mapped[datetime] =  mapped_column( DateTime(timezone=True),server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Application(Base):
-    __tablename__= "applications"
-    __table_args__ = (UniqueConstraint("user_id","job_id"),)
+    __tablename__ = "applications"
+    __table_args__ = (UniqueConstraint("user_id", "job_id"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"))
     status: Mapped[str]
     notes: Mapped[str | None]
-    created_at: Mapped[datetime] = mapped_column( DateTime(timezone=True),server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column( DateTime(timezone=True),server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # The job this application is about. Async sessions cannot lazy load, so
     # every query that reads `.job` has to ask for it up front.
     job: Mapped["Job"] = relationship(lazy="raise")
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    doc_type: Mapped[str]
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"))
+    title: Mapped[str]
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

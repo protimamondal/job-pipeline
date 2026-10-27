@@ -84,7 +84,11 @@ the existing `jobs`, `users`, and `applications` tables.
       has nothing to compare. Verified locally: pgvector 0.8.7 enabled.
 - [ ] Verify on Render after the next deploy (the container runs
       `alembic upgrade head` on start; Render's Postgres has pgvector installed).
-- [ ] `documents` table.
+- [x] `documents` table (migration `d6940ba7b23b`): one table for all RAG
+      input (`doc_type` = job / resume / application_note). `user_id` is NULL
+      for public jobs and set for private rows, which is the privacy filter;
+      `job_id` is NULL for a resume. Job descriptions are copied in, so
+      `jobs` stays the source of truth and `documents` can be rebuilt.
 - [ ] Import about 100 Arbeitnow jobs.
 - [ ] Resume entered as pasted text, per user.
 
