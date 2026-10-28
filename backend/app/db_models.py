@@ -29,6 +29,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    resume: Mapped[str | None] = mapped_column(Text)
 
 
 class Application(Base):
