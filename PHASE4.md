@@ -95,7 +95,18 @@ the existing `jobs`, `users`, and `applications` tables.
       text with one block per line; the "Find Jobs in … on Arbeitnow" footer
       removed. 100 is a total, so a second run inserts 0. Duplicates skipped
       by URL and by company + title. Local: 107 jobs. Not run on Render yet.
-- [ ] Resume entered as pasted text, per user.
+- [x] Resume entered as pasted text, per user: `GET` and `PUT /me/resume`,
+      stored in `users.resume` (nullable). The user comes only from the
+      token. Trimmed; blank or over 20,000 characters is rejected with 422.
+- [x] `backend/build_documents.py` fills `documents` from `jobs`,
+      `users.resume` and `applications.notes`. It deletes and rewrites the
+      whole table in one transaction, so a second run gives the same table.
+      Empty resumes and notes are skipped. Local run with a test user:
+      107 jobs (no `user_id`), 1 resume and 1 note (with the user's id).
+- [ ] On Render: run `import_arbeitnow.py` and `build_documents.py` from a
+      laptop against Render's External Database URL (the free plan has no
+      shell, and neither script belongs in the start command: the import
+      calls an outside API, and the build rewrites the table on every boot).
 
 **Acceptance:** `CREATE EXTENSION vector` succeeds locally and in production;
 the documents table holds jobs, a resume, and application notes for a test user.
