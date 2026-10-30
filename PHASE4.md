@@ -68,7 +68,7 @@ the existing `jobs`, `users`, and `applications` tables.
 
 ### 1 — Setup and documents
 
-**Status:** In progress
+**Status:** Complete (2026-10-30)
 
 **Build:** pgvector available locally and on Render; a `documents` table; about
 100 Arbeitnow jobs imported; a way for a user to save their resume as text.
@@ -105,8 +105,12 @@ the existing `jobs`, `users`, and `applications` tables.
       whole table in one transaction, so a second run gives the same table.
       Empty resumes and notes are skipped. Local run with a test user:
       107 jobs (no `user_id`), 1 resume and 1 note (with the user's id).
-- [ ] On Render: run `import_arbeitnow.py` and `build_documents.py` from a
-      laptop against Render's External Database URL (the free plan has no
+- [x] On Render (2026-10-30): ran `import_arbeitnow.py` and
+      `build_documents.py` from a laptop against Render's External Database
+      URL. Checked with psql: pgvector 0.8.0, Alembic at `ddc0144c5252`,
+      107 jobs (100 imported), 107 `job` documents. No resumes or notes yet,
+      since no production user has saved any. Rerun `build_documents.py` the
+      same way after new resumes or notes, until Part 3 keeps them in sync (the free plan has no
       shell, and neither script belongs in the start command: the import
       calls an outside API, and the build rewrites the table on every boot).
 
