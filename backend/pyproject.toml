@@ -21,6 +21,8 @@ dependencies = [
     # declared because the code imports it by name.
     "httpx2>=2.13.1",
     "redis>=8.1.0",
+    "langchain-text-splitters>=1.1.3",
+    "tiktoken>=0.14.0",
 ]
 
 [tool.pytest.ini_options]

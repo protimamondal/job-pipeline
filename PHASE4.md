@@ -119,7 +119,7 @@ the documents table holds jobs, a resume, and application notes for a test user.
 
 ### 2 — Chunking
 
-**Status:** Not started
+**Status:** Complete (2026-10-31)
 
 **Build:** a chunking function. Structural for resumes (one chunk per section),
 with recursive splitting inside any section that is too long; recursive with
@@ -127,6 +127,36 @@ overlap for job descriptions. Revision note `01`.
 
 **Acceptance:** unit tests on real text; the chunks are printed and read by eye
 before they are embedded.
+
+**Implementation checklist:**
+
+- [x] Version 1 hand-written first (paragraphs only, merged up to a limit) to
+      understand what a recursive splitter does, then replaced by
+      `langchain-text-splitters` `RecursiveCharacterTextSplitter`, the
+      standard tool for the same algorithm (`backend/app/chunking.py`).
+- [x] Size in tokens, not characters: `from_tiktoken_encoder` with
+      `cl100k_base`, the tokenizer of OpenAI's embedding models. LangChain
+      imports tiktoken but does not install it, so both are dependencies.
+- [x] 300 tokens per chunk, 50 tokens of overlap. Separators
+      `
+
+`, `
+`, `. `, ` `, `""`; the empty string lets a word longer
+      than the limit (a long URL) still be cut. Starting values; Part 6
+      measures them.
+- [x] Decision: no separate structural splitter for resumes. A pasted resume
+      separates its sections with blank lines, which is the splitter's first
+      cut, so the same function serves jobs, resumes and notes.
+- [x] `backend/tests/test_chunking.py`: 6 tests (limit, empty text,
+      paragraph boundaries, overlap, a word longer than the limit).
+- [x] `backend/print_chunks.py` printed and read locally (2026-10-31):
+      109 documents -> 454 chunks, biggest 299 tokens. Cuts fall between
+      paragraphs, no chunk starts mid-word, and the overlap repeats the last
+      paragraph of one chunk at the start of the next. Jobs make 1–8 chunks
+      (the 7 seeded samples are 1 each).
+- Noted for Part 3: a chunk from the middle of a job description does not
+  say which job it is from. Prefix each chunk with the document title when
+  embedding.
 
 ### 3 — Embeddings and storage
 
