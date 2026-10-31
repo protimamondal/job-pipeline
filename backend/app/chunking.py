@@ -14,6 +14,6 @@ _splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
 
 
 def split_text(text: str) -> list[str]:
-    """Split text into chunks of at most max_chars, cutting at the largest
+    """Split text into chunks of at most CHUNK_TOKENS tokens, cutting at the largest
     boundary that works."""
     return _splitter.split_text(text)
