@@ -1,6 +1,9 @@
-from sqlalchemy import Text, ForeignKey, func, UniqueConstraint, DateTime
+from sqlalchemy import Text, ForeignKey, func, UniqueConstraint, DateTime, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from datetime import datetime
+from pgvector.sqlalchemy import Vector
+
+EMBEDDING_DIMENSIONS = 1536
 
 
 class Base(DeclarativeBase):
@@ -63,3 +66,25 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+    __table_args__ = (
+        Index(
+            "ix_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"))
+    doc_type: Mapped[str]
+    chunk_index: Mapped[int]
+    content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))

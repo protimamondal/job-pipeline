@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -27,6 +28,10 @@ TestSessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
 
 async def _reset_database() -> None:
     async with test_engine.begin() as conn:
+        # create_all builds tables from the models, not from the migrations,
+        # so it never runs the migration that enables pgvector. Without the
+        # extension Postgres has no `vector` type for chunks.embedding.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
@@ -109,7 +114,9 @@ def instant_mcp_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.routers import chat as chat_router
 
     monkeypatch.setattr(
-        chat_router, "MCP_RETRY_BACKOFF_SECONDS", (0.0,) * chat_router.MCP_CONNECT_ATTEMPTS
+        chat_router,
+        "MCP_RETRY_BACKOFF_SECONDS",
+        (0.0,) * chat_router.MCP_CONNECT_ATTEMPTS,
     )
 
     async def no_real_wake(settings) -> str:
@@ -143,9 +150,7 @@ def stub_chat_ai(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda **kw: FakeOpenAI([[text_chunk("ok", finish_reason="stop")]]),
     )
     monkeypatch.setattr(chat_router, "streamable_http_client", FakeHttpClient)
-    monkeypatch.setattr(
-        chat_router, "ClientSession", lambda read, write: FakeSession()
-    )
+    monkeypatch.setattr(chat_router, "ClientSession", lambda read, write: FakeSession())
     monkeypatch.setattr(chat_router, "get_client", lambda: FakeLangfuse())
 
 
