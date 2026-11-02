@@ -192,8 +192,12 @@ HNSW index in use.
       HNSW only before `ANALYZE`, when its row estimate was wrong. The index
       does work: with `enable_seqscan` off it is used (about 2 ms) and returns
       the same 5 chunks. Decide this box in Part 4, on the real search query.
-- [ ] Run on Render: push, then `build_documents.py` and
-      `python -m app.embed_chunks` against the External Database URL.
+- [x] Run on Render (2026-11-02): `build_documents.py` and
+      `python -m app.embed_chunks` against the External Database URL. Checked
+      with psql: Alembic at `3518023b6e38`, 107 documents, 473 chunks, 1536
+      numbers each, no document without chunks. Render has more chunks than
+      local (454) because its 100 imported jobs were fetched on a different
+      day. No resumes or notes in production yet.
 
 ### 4 — First search
 
