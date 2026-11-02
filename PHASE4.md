@@ -160,7 +160,7 @@ before they are embedded.
 
 ### 3 — Embeddings and storage
 
-**Status:** Not started
+**Status:** Complete (2026-11-02)
 
 **Build:** a `chunks` table with `text`, `embedding vector(...)`, and metadata
 (`user_id`, `doc_type`, `job_id`, `document_id`) via an Alembic migration; an
@@ -186,12 +186,13 @@ HNSW index in use.
 - [x] Local run (2026-11-02): 454 chunks, 1536 numbers each, no document
       without chunks. `tests/test_embed_chunks.py` covers it with a fake
       OpenAI client.
-- [ ] `EXPLAIN` shows HNSW in use. Not met in normal planning: with up-to-date
-      statistics (`ANALYZE`), Postgres chooses a sequential scan and sort at
-      454 rows, with or without the `user_id` filter (about 6-7 ms). It used
-      HNSW only before `ANALYZE`, when its row estimate was wrong. The index
-      does work: with `enable_seqscan` off it is used (about 2 ms) and returns
-      the same 5 chunks. Decide this box in Part 4, on the real search query.
+- [x] HNSW check, accepted 2026-11-02 on two tests. On the real 454 rows,
+      Postgres chooses a sequential scan and sort (about 6-7 ms); with
+      `enable_seqscan` off it uses the index (about 2 ms) and returns the same
+      5 chunks. On a temporary table of 20,000 random vectors it chose HNSW by
+      itself, with and without a broad `user_id` filter (about 5 ms, against
+      301 ms with the index off). Test the real search query again in Part 4,
+      including a narrow filter, which can return fewer than 5 results.
 - [x] Run on Render (2026-11-02): `build_documents.py` and
       `python -m app.embed_chunks` against the External Database URL. Checked
       with psql: Alembic at `3518023b6e38`, 107 documents, 473 chunks, 1536
