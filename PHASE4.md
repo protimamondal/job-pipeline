@@ -170,6 +170,31 @@ ingestion step that embeds each chunk and saves it; an HNSW index. Notes `02`,
 **Acceptance:** every document has chunks with embeddings; `EXPLAIN` shows the
 HNSW index in use.
 
+**Implementation checklist:**
+
+- [x] `pgvector` Python package added; `chunks` table with `vector(1536)`, an
+      HNSW index using cosine, and an index on `user_id` (migration
+      `3518023b6e38`). `user_id`, `job_id` and `doc_type` are copied from the
+      document so a search filters on this table alone.
+- [x] The test database enables pgvector in `conftest.py`, because
+      `create_all` does not run the migration that does.
+- [x] `app/embed_chunks.py`: cuts every document, puts its title at the start
+      of each chunk, embeds with `text-embedding-3-small`, 100 chunks per
+      request, then replaces all chunks. A failed OpenAI call leaves the old
+      chunks in place. `build_documents.py` deletes documents, which deletes
+      their chunks, so run this after it.
+- [x] Local run (2026-11-02): 454 chunks, 1536 numbers each, no document
+      without chunks. `tests/test_embed_chunks.py` covers it with a fake
+      OpenAI client.
+- [ ] `EXPLAIN` shows HNSW in use. Not met in normal planning: with up-to-date
+      statistics (`ANALYZE`), Postgres chooses a sequential scan and sort at
+      454 rows, with or without the `user_id` filter (about 6-7 ms). It used
+      HNSW only before `ANALYZE`, when its row estimate was wrong. The index
+      does work: with `enable_seqscan` off it is used (about 2 ms) and returns
+      the same 5 chunks. Decide this box in Part 4, on the real search query.
+- [ ] Run on Render: push, then `build_documents.py` and
+      `python -m app.embed_chunks` against the External Database URL.
+
 ### 4 — First search
 
 **Status:** Not started
