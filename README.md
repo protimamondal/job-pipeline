@@ -136,7 +136,7 @@ nothing is rate limited, which is logged but not fatal.
 ### Tests
 
 ```bash
-cd backend && uv run pytest        # 123 tests, needs the Postgres container
+cd backend && uv run pytest        # 131 tests, needs the Postgres container
 cd mcp-server && uv run pytest     # 20 tests
 ```
 

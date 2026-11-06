@@ -110,8 +110,9 @@ the existing `jobs`, `users`, and `applications` tables.
       URL. Checked with psql: pgvector 0.8.0, Alembic at `ddc0144c5252`,
       107 jobs (100 imported), 107 `job` documents. No resumes or notes yet,
       since no production user has saved any. Rerun `build_documents.py` the
-      same way after new resumes or notes, until Part 3 keeps them in sync (the free plan has no
-      shell, and neither script belongs in the start command: the import
+      same way after new resumes or notes, then `python -m app.embed_chunks`
+      (Part 3). Nothing updates them automatically yet; see the Part 4
+      follow-ups. (The free plan has no shell, and neither script belongs in the start command: the import
       calls an outside API, and the build rewrites the table on every boot).
 
 **Acceptance:** `CREATE EXTENSION vector` succeeds locally and in production;
@@ -202,13 +203,59 @@ HNSW index in use.
 
 ### 4 — First search
 
-**Status:** Not started
+**Status:** Complete (2026-11-06)
 
 **Build:** an endpoint that embeds a question and returns the top 5 nearest
 chunks, always filtered by the current user. Notes `02`, `04`.
 
 **Acceptance:** realistic questions return sensible chunks; a second user never
 sees the first user's chunks (tested).
+
+**Implementation checklist:**
+
+- [x] `app/search.py`: `search_chunks` returns the 5 chunks closest to the
+      question's vector by cosine distance, keeping only public chunks
+      (`user_id IS NULL`) and the current user's own.
+- [x] `app/routers/search.py`: `POST /search` with `{"question": "..."}`.
+      The user comes only from the login token; the question is embedded
+      with the same `embed` function as the chunks, then passed to
+      `search_chunks`. The question is trimmed, and a blank one or one over
+      1,000 characters is rejected (422).
+- [x] Response schema `SearchResult`: `id`, `job_id`, `doc_type`, `content`.
+      The embedding, `user_id` and `document_id` are not sent.
+- [x] `tests/test_search.py`: 8 tests with made-up vectors and a fake
+      `embed`, so no test calls OpenAI. They cover closest first, at most 5,
+      public plus own chunks, another user's chunk never returned even when it
+      is the closest (in the function and through the endpoint), the response
+      fields, blank and huge questions, and a missing login (401).
+- [x] Real questions, local database, real OpenAI (2026-11-06), one local
+      user with a resume and a note:
+      - "Which jobs use React and TypeScript?": the resume, then 4 React and
+        frontend jobs. Good.
+      - "Remote roles working on LLMs or AI agents": AI engineering and AI
+        research jobs. Good.
+      - "What experience do I have?": the resume first, then unrelated jobs.
+      - "What should I ask in the TransPerfect interview?": the TransPerfect
+        note first, then its job. Good.
+      - "What did I note about my applications?": 5 unrelated jobs; the note
+        is missed, because search matches meaning and the note is about
+        TransPerfect, not about "notes".
+- [ ] Narrow-filter check with HNSW: not done. On the local 454 rows Postgres
+      sorts all rows even with `enable_seqscan` off, so the index is not
+      used and the question (can a narrow filter return fewer than 5?) cannot
+      be tested here. Repeat once there is more data.
+
+**Follow-ups (not part of this acceptance):**
+
+- A saved resume or note is not searchable until `build_documents.py` and
+  `python -m app.embed_chunks` are run again. Update chunks automatically
+  on save (candidate for Part 5).
+- General questions about notes miss them. Possible fix: filter by
+  `doc_type` when the question is about notes.
+- Two chunks of the same job can both be returned. Possible fix: keep the
+  closest chunk per job.
+- `POST /search` calls OpenAI on every request and has no rate limit yet;
+  chat has one. Add it before real users.
 
 ### 5 — Answer with citations
 

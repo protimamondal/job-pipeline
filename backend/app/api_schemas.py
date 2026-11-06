@@ -84,3 +84,17 @@ class ResumeUpdate(BaseModel):
 
 class ResumeRead(BaseModel):
     resume: str | None
+
+
+class SearchRequest(BaseModel):
+    question: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)
+    ]
+
+
+class SearchResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    job_id: int | None
+    doc_type: str
+    content: str
